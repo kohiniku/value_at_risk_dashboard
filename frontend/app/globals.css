@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Default (light) palette keeps typography and surface values bright so the theme
+   visibly changes when the `.dark` class is toggled. */
+:root {
+  --background: #f4f6fb;
+  --foreground: #101528;
+  --card: #ffffff;
+  --card-foreground: #101528;
+  --muted: #eef1f8;
+  --muted-foreground: #4c5268;
+  --border: #d7dbea;
+  --input: #d7dbea;
+  --primary: #2b63d9;
+  --primary-foreground: #ffffff;
+  --ring: #2b63d9;
+}
+
+.dark {
+  --background: #05070f;
+  --foreground: #f5f6fb;
+  --card: #0f1327;
+  --card-foreground: #f5f6fb;
+  --muted: #1e2743;
+  --muted-foreground: #96a2c2;
+  --border: #1a223b;
+  --input: #1a223b;
+  --primary: #6ea6ff;
+  --primary-foreground: #05070f;
+  --ring: #6ea6ff;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: 'Inter', 'Noto Sans JP', sans-serif;
+}
+
+::selection {
+  background: rgba(79, 141, 247, 0.35);
+}
+
+/* ApexCharts data labels: force light text + subtle outline so暗い背景でも潰れない */
+.apexcharts-datalabel,
+.apexcharts-datalabel tspan {
+  fill: #f8fafc !important;
+  color: #f8fafc !important;
+  paint-order: stroke;
+  stroke: rgba(5, 7, 15, 0.45);
+  stroke-width: 2px;
+}

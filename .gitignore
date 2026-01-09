@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.env
+*.db
+*egg-info*
+
+# Node
+node_modules/
+.npm/
+.pnpm-store/
+.DS_Store
+.next/
+.output/
+
+# Tooling
+*.log
+coverage/
+
+# Codex
+.serena/

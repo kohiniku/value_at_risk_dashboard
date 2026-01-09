@@ -1,0 +1,40 @@
+[project]
+name = "value_at_risk"
+version = "0.1.0"
+description = "Value at Risk dashboard"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+]
+
+[tool.ruff]
+line-length = 150
+
+[tool.ruff.lint]
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflake
+    "I",  # isort
+    "B",  # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+]
+
+ignore = [
+    "B023",  # variable bindings
+    "E501",  # line too long
+]
+
+[tool.pylint]
+disable = "all"
+enable = "E1101"
+
+[tool.mypy]
+python_version = "3.13"
+no_strict_optional = true
+ignore_missing_imports = true
+check_untyped_defs = true
+
+[tool.uv]
+allow-insecure-host = ["pypi.python.org", "files.pythonhosted.org", "pypi.org", "github.com"]
