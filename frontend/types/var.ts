@@ -40,7 +40,7 @@ export interface FactorVaR {
   risk_category: string
   currency: string | null
   risk_factor: string
-  risk_direction: string
+  risk_direction: boolean
   var_amount: number
   comparison: number | null
 }

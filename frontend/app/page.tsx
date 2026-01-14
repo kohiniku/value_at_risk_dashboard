@@ -48,6 +48,7 @@ export default function DashboardPage() {
   const [factorVarError, setFactorVarError] = useState<string | null>(null)
   const [availableDates, setAvailableDates] = useState<string[]>([])
   const [selectedDate, setSelectedDate] = useState('')
+  const [comparisonDate, setComparisonDate] = useState('')
   const [selectedRic, setSelectedRic] = useState(AGGREGATE_RIC)
   const [windowDays, setWindowDays] = useState(30)
   const [timeseries, setTimeseries] = useState<TimeSeriesResponse | null>(null)
@@ -70,13 +71,20 @@ export default function DashboardPage() {
   }, [selectedDate])
 
   const fetchFactorVaR = useCallback(async () => {
-    const search = selectedDate ? `?as_of=${encodeURIComponent(selectedDate)}` : ''
+    const params = new URLSearchParams()
+    if (selectedDate) {
+      params.append('as_of', selectedDate)
+    }
+    if (comparisonDate) {
+      params.append('comparison_date', comparisonDate)
+    }
+    const search = params.toString() ? `?${params.toString()}` : ''
     const response = await fetch(`${API_BASE}/var/factor_var${search}`, { cache: 'no-store' })
     if (!response.ok) {
       throw new Error(`Failed summary request: ${response.status}`)
     }
     return (await response.json()) as FactorVarListResponse
-  }, [selectedDate])
+  }, [selectedDate, comparisonDate])
 
   useEffect(() => {
     let active = true
@@ -144,7 +152,7 @@ export default function DashboardPage() {
       active = false
       clearInterval(intervalId)
     }
-  }, [fetchFactorVaR, selectedDate])
+  }, [fetchFactorVaR, selectedDate, comparisonDate])
 
   useEffect(() => {
     let cancelled = false
@@ -158,6 +166,7 @@ export default function DashboardPage() {
         if (!cancelled && payload.length) {
           setAvailableDates(payload)
           setSelectedDate((prev) => (prev && payload.includes(prev) ? prev : payload[0]))
+          setComparisonDate((prev) => (prev && payload.includes(prev) ? prev : (payload.length > 1 ? payload[1] : '')))
         }
       } catch (error) {
         console.error('基準日リスト取得に失敗しました', error)
@@ -273,9 +282,18 @@ export default function DashboardPage() {
     setActiveTab('dashboard')
   }, [])
 
-  const handleDateChange = useCallback((date: string) => {
-    setSelectedDate(date)
-  }, [])
+  const handleDateChange = useCallback(
+    (date: string) => {
+      setSelectedDate(date)
+      const idx = availableDates.indexOf(date)
+      if (idx >= 0 && idx < availableDates.length - 1) {
+        setComparisonDate(availableDates[idx + 1])
+      } else {
+        setComparisonDate('')
+      }
+    },
+    [availableDates],
+  )
 
   const handleAssetChange = useCallback((asset: string) => {
     setSelectedRic(asset)
@@ -356,6 +374,8 @@ export default function DashboardPage() {
                 dates={availableDates}
                 selectedDate={selectedDate || summary?.as_of || ''}
                 onDateChange={handleDateChange}
+                comparisonDate={comparisonDate}
+                onComparisonDateChange={setComparisonDate}
               />
             </section>
 

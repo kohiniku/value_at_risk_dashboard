@@ -48,8 +48,9 @@ export function AssetDetailsTable({ assets, factorVarList }: AssetDetailsTablePr
     [riskCategory: string]: {
       [currency: string]: {
         [riskFactor: string]: {
-          risk_direction: string;
+          risk_direction: boolean;
           amount: number;
+          comparison: number | null;
         };
       };
     };
@@ -59,8 +60,9 @@ export function AssetDetailsTable({ assets, factorVarList }: AssetDetailsTablePr
     riskCategory: string;
     currency: string;
     riskFactor: string;
-    riskDirection: string;
+    riskDirection: boolean;
     amount: number;
+    comparison: number | null;
     isFirstInCategory: boolean;
     isFirstInCurrency: boolean;
     categoryRowSpan: number;
@@ -69,7 +71,7 @@ export function AssetDetailsTable({ assets, factorVarList }: AssetDetailsTablePr
 
   const transformData = (input: FactorVaR[]): TransformedData => {
     return input.reduce((result: TransformedData, item) => {
-      const { risk_category, currency, risk_factor, risk_direction, var_amount } = item;
+      const { risk_category, currency, risk_factor, risk_direction, var_amount, comparison } = item;
 
       // risk_categoryレベルの初期化
       if (!result[risk_category]) {
@@ -87,7 +89,8 @@ export function AssetDetailsTable({ assets, factorVarList }: AssetDetailsTablePr
       // risk_factorレベルにデータを格納
       result[risk_category][currencyKey][risk_factor] = {
         risk_direction: risk_direction,
-        amount: var_amount / HUNDRED_MILLION
+        amount: var_amount / HUNDRED_MILLION,
+        comparison: comparison ? comparison / HUNDRED_MILLION : null
       };
 
       return result;
@@ -109,6 +112,7 @@ export function AssetDetailsTable({ assets, factorVarList }: AssetDetailsTablePr
             riskFactor,
             riskDirection: details.risk_direction,
             amount: details.amount,
+            comparison: details.comparison,
             isFirstInCategory: false,
             isFirstInCurrency: false,
             categoryRowSpan: 0,
@@ -154,6 +158,39 @@ export function AssetDetailsTable({ assets, factorVarList }: AssetDetailsTablePr
     return Math.abs(hash) % 360
   }
 
+  const getRiskDirectionLabel = (category: string, direction: boolean) => {
+    if (category.includes('金利')) {
+      return direction ? '上昇' : '低下'
+    }
+    if (category.includes('クレジット') || category.includes('為替')) {
+      return direction ? '拡大' : '縮小'
+    }
+    if (category.includes('株式') || category.includes('コモディティ') || category.includes('不動産')) {
+      return direction ? '下落' : '上昇'
+    }
+    return direction ? '増加' : '減少'
+  }
+
+  const getRiskDirectionColor = (category: string, direction: boolean) => {
+    // 上昇・拡大・増加 -> Green (emerald-400)
+    // 下落・縮小・低下・減少 -> Red (rose-400)
+    
+    if (category.includes('金利')) {
+      // True: 上昇 (Green), False: 低下 (Red)
+      return direction ? 'text-emerald-400' : 'text-rose-400'
+    }
+    if (category.includes('クレジット') || category.includes('為替')) {
+      // True: 拡大 (Green), False: 縮小 (Red)
+      return direction ? 'text-emerald-400' : 'text-rose-400'
+    }
+    if (category.includes('株式') || category.includes('コモディティ') || category.includes('不動産')) {
+      // True: 下落 (Red), False: 上昇 (Green)
+      return direction ? 'text-rose-400' : 'text-emerald-400'
+    }
+    // Default: True: 増加 (Green), False: 減少 (Red)
+    return direction ? 'text-emerald-400' : 'text-rose-400'
+  }
+
   return (
     <Card title="リスクファクター別VaR">
       <div className="overflow-x-auto">
@@ -166,6 +203,7 @@ export function AssetDetailsTable({ assets, factorVarList }: AssetDetailsTablePr
               <th className="w-24 px-3 py-3 text-center">リスクの方向性</th>
               <th className="w-24 px-3 py-3 text-right">VaR (億円)</th>
               <th className="w-[28rem] px-4 py-3 text-left">VaR比較バー</th>
+              <th className="w-24 px-3 py-3 text-right">比較日からの<br/>増減 (億円)</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/40">
@@ -206,10 +244,10 @@ export function AssetDetailsTable({ assets, factorVarList }: AssetDetailsTablePr
                   <td
                     className={clsx(
                       'w-24 px-3 py-3 text-center font-medium text-xs',
-                      item.riskDirection === '増加' ? 'text-emerald-400' : 'text-rose-400',
+                      getRiskDirectionColor(item.riskCategory, item.riskDirection)
                     )}
                   >
-                    {item.riskDirection}
+                    {getRiskDirectionLabel(item.riskCategory, item.riskDirection)}
                   </td>
 
                   {/* VaR金額の列 */}
@@ -224,9 +262,32 @@ export function AssetDetailsTable({ assets, factorVarList }: AssetDetailsTablePr
                   <td className="w-[28rem] px-4 py-3">
                     <VarLevelBar
                       amount={Math.abs(item.amount)}
+                      comparison={item.comparison ? Math.abs(item.comparison) : undefined}
                       maxAmount={maxAmount}
                       hue={hue}
                     />
+                  </td>
+
+                  {/* 増減の列 */}
+                  <td
+                    className={clsx(
+                      'w-24 px-3 py-3 text-right font-medium',
+                      (() => {
+                        if (item.comparison === null) return 'text-muted-foreground'
+                        const diff = item.amount - item.comparison
+                        if (diff > 0) return 'text-emerald-400'
+                        if (diff < 0) return 'text-rose-400'
+                        return 'text-muted-foreground'
+                      })()
+                    )}
+                  >
+                    {item.comparison !== null
+                      ? (item.amount - item.comparison).toLocaleString('ja-JP', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                          signDisplay: 'exceptZero'
+                        })
+                      : '-'}
                   </td>
                 </tr>
               )
@@ -238,7 +299,7 @@ export function AssetDetailsTable({ assets, factorVarList }: AssetDetailsTablePr
   );
 }
 
-function VarLevelBar({ amount, maxAmount, hue }: { amount: number; maxAmount: number; hue?: number }) {
+function VarLevelBar({ amount, comparison, maxAmount, hue }: { amount: number; comparison?: number; maxAmount: number; hue?: number }) {
   if (maxAmount === 0) {
     return <div className="text-xs text-muted-foreground">データなし</div>
   }
@@ -246,18 +307,31 @@ function VarLevelBar({ amount, maxAmount, hue }: { amount: number; maxAmount: nu
   const normalized = Math.min(1, Math.max(0, amount / maxAmount))
   const ratio = normalized
   
+  const comparisonRatio = comparison !== undefined ? Math.min(1, Math.max(0, comparison / maxAmount)) : undefined
+
   return (
-    <div className="relative h-2 w-full overflow-hidden rounded-full bg-border/60">
-      <div
-        className={clsx(
-          'absolute inset-y-0 left-0 rounded-full',
-          hue === undefined && 'bg-sky-400',
+    <div className="relative h-6 w-full flex items-center">
+      <div className="relative h-2 w-full overflow-hidden rounded-full bg-border/60">
+        <div
+          className={clsx(
+            'absolute inset-y-0 left-0 rounded-full',
+            hue === undefined && 'bg-sky-400',
+          )}
+          style={{
+            width: `${ratio * 100}%`,
+            backgroundColor: hue !== undefined ? `hsl(${hue}, 70%, 50%)` : undefined,
+          }}
+        />
+        {comparisonRatio !== undefined && (
+          <div
+            className="absolute top-0 h-full w-1 bg-white/80 z-10"
+            style={{
+              left: `${comparisonRatio * 100}%`,
+              transform: 'translateX(-50%)'
+            }}
+          />
         )}
-        style={{
-          width: `${ratio * 100}%`,
-          backgroundColor: hue !== undefined ? `hsl(${hue}, 70%, 50%)` : undefined,
-        }}
-      />
+      </div>
     </div>
   )
 }
