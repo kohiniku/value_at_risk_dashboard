@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import type { Asset, FactorVaR, Portfolio } from '@/types/var'
+import type { Asset, FactorVaR } from '@/types/var'
 import { Card } from '@/components/ui/card'
 
 
@@ -8,7 +8,6 @@ const HUNDRED_MILLION: number = 100000000
 interface AssetDetailsTableProps {
   assets: Asset[]
   factorVarList: FactorVaR[]
-  portfolio: Portfolio
 }
 
 // const contributionColumns: {
@@ -44,7 +43,7 @@ interface AssetDetailsTableProps {
 // ]
 
 
-export function AssetDetailsTable({ assets, factorVarList, portfolio }: AssetDetailsTableProps) {
+export function AssetDetailsTable({ assets, factorVarList }: AssetDetailsTableProps) {
   type TransformedData = {
     [riskCategory: string]: {
       [currency: string]: {
@@ -103,8 +102,8 @@ export function AssetDetailsTable({ assets, factorVarList, portfolio }: AssetDet
       const categoryItems: FlattenedItem[] = [];
 
       Object.entries(currencies).forEach(([currency, riskFactors]) => {
-        const currencyItems = Object.entries(riskFactors).map(
-          ([riskFactor, details]) => ({
+        const currencyItems = Object.entries(riskFactors)
+          .map(([riskFactor, details]) => ({
             riskCategory,
             currency,
             riskFactor,
@@ -114,8 +113,8 @@ export function AssetDetailsTable({ assets, factorVarList, portfolio }: AssetDet
             isFirstInCurrency: false,
             categoryRowSpan: 0,
             currencyRowSpan: 0,
-          })
-        );
+          }))
+          .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
 
         // 最初の行にフラグを立てる
         if (currencyItems.length > 0) {
@@ -143,15 +142,17 @@ export function AssetDetailsTable({ assets, factorVarList, portfolio }: AssetDet
 
   // maxAmountの計算（factorVarListも含める）
   const factorMax = factorVarList.length
-    ? Math.max(...factorVarList.map((item) => Math.abs(item.var_amount)))
+    ? Math.max(...factorVarList.map((item) => Math.abs(item.var_amount) / HUNDRED_MILLION))
     : 0;
-  const maxAmount = Math.max(factorMax, portfolio.total, 1);
+  const maxAmount = Math.max(factorMax, 1);
 
-  const totalRow = {
-    amount: portfolio.total,
-    change_amount: portfolio.change_amount,
-    change_pct: portfolio.change_pct,
-  };
+  const getHue = (str: string) => {
+    let hash = 0
+    for (let i = 0; i < str.length; i++) {
+      hash = str.charCodeAt(i) + ((hash << 5) - hash)
+    }
+    return Math.abs(hash) % 360
+  }
 
   return (
     <Card title="リスクファクター別VaR">
@@ -162,93 +163,74 @@ export function AssetDetailsTable({ assets, factorVarList, portfolio }: AssetDet
               <th className="w-32 px-3 py-3 text-left">リスク分類</th>
               <th className="w-24 px-3 py-3 text-left">通貨</th>
               <th className="w-48 px-3 py-3 text-left">リスクファクター</th>
+              <th className="w-24 px-3 py-3 text-center">リスクの方向性</th>
               <th className="w-24 px-3 py-3 text-right">VaR (億円)</th>
               <th className="w-[28rem] px-4 py-3 text-left">VaR比較バー</th>
-              <th className="w-24 px-3 py-3 text-center">方向性</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/40">
-            {/* 合計行 */}
-            <tr className="align-middle bg-muted/10 font-semibold">
-              <td className="w-32 px-3 py-3 text-muted-foreground" colSpan={2}>
-                全体
-              </td>
-              <td className="w-48 px-3 py-3">全リスク合算</td>
-              <td className="w-24 px-3 py-3 text-right text-primary">
-                {totalRow.amount.toFixed(2)}
-              </td>
-              <td className="w-[28rem] px-4 py-3">
-                <VarLevelBar amount={Math.abs(totalRow.amount)} maxAmount={maxAmount} />
-              </td>
-              <td
-                className={clsx(
-                  'w-24 px-3 py-3 text-center font-medium',
-                  totalRow.change_amount >= 0 ? 'text-emerald-400' : 'text-rose-400',
-                )}
-              >
-                {totalRow.change_amount >= 0 ? '+' : ''}
-                {totalRow.change_amount.toFixed(2)}
-              </td>
-            </tr>
-
             {/* リスクファクター別の行 */}
-            {flatData.map((item) => (
-              <tr
-                key={`${item.riskCategory}-${item.currency}-${item.riskFactor}`}
-                className="align-middle hover:bg-muted/5"
-              >
-                {/* リスク分類の列（カテゴリの最初の行のみ表示） */}
-                {item.isFirstInCategory && (
-                  <td
-                    className="w-32 px-3 py-3 font-bold text-foreground bg-muted/20"
-                    rowSpan={item.categoryRowSpan}
-                  >
-                    {item.riskCategory}
-                  </td>
-                )}
-
-                {/* 通貨の列（通貨グループの最初の行のみ表示） */}
-                {item.isFirstInCurrency && (
-                  <td
-                    className="w-24 px-3 py-3 font-semibold text-muted-foreground"
-                    rowSpan={item.currencyRowSpan}
-                  >
-                    {item.currency === 'null' ? '-' : item.currency}
-                  </td>
-                )}
-
-                {/* リスクファクターの列 */}
-                <td className="w-48 px-3 py-3 font-medium">
-                  {item.riskFactor}
-                </td>
-
-                {/* VaR金額の列 */}
-                <td className="w-24 px-3 py-3 text-right font-semibold text-primary">
-                  {item.amount.toLocaleString('ja-JP', {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2
-                  })}
-                </td>
-
-                {/* VarLevelBarの列 */}
-                <td className="w-[28rem] px-4 py-3">
-                  <VarLevelBar
-                    amount={Math.abs(item.amount)}
-                    maxAmount={maxAmount}
-                  />
-                </td>
-
-                {/* リスク方向性の列 */}
-                <td
-                  className={clsx(
-                    'w-24 px-3 py-3 text-center font-medium text-xs',
-                    item.riskDirection === 'Positive' ? 'text-emerald-400' : 'text-rose-400',
-                  )}
+            {flatData.map((item) => {
+              const hue = getHue(`${item.riskCategory}-${item.currency}`)
+              return (
+                <tr
+                  key={`${item.riskCategory}-${item.currency}-${item.riskFactor}`}
+                  className="align-middle hover:bg-muted/5"
                 >
-                  {item.riskDirection}
-                </td>
-              </tr>
-            ))}
+                  {/* リスク分類の列（カテゴリの最初の行のみ表示） */}
+                  {item.isFirstInCategory && (
+                    <td
+                      className="w-32 px-3 py-3 font-bold text-foreground bg-muted/20"
+                      rowSpan={item.categoryRowSpan}
+                    >
+                      {item.riskCategory}
+                    </td>
+                  )}
+
+                  {/* 通貨の列（通貨グループの最初の行のみ表示） */}
+                  {item.isFirstInCurrency && (
+                    <td
+                      className="w-24 px-3 py-3 font-semibold text-muted-foreground"
+                      rowSpan={item.currencyRowSpan}
+                    >
+                      {item.currency === 'null' ? '-' : item.currency}
+                    </td>
+                  )}
+
+                  {/* リスクファクターの列 */}
+                  <td className="w-48 px-3 py-3 font-medium">
+                    {item.riskFactor}
+                  </td>
+
+                  {/* リスク方向性の列 */}
+                  <td
+                    className={clsx(
+                      'w-24 px-3 py-3 text-center font-medium text-xs',
+                      item.riskDirection === '増加' ? 'text-emerald-400' : 'text-rose-400',
+                    )}
+                  >
+                    {item.riskDirection}
+                  </td>
+
+                  {/* VaR金額の列 */}
+                  <td className="w-24 px-3 py-3 text-right font-semibold text-primary">
+                    {item.amount.toLocaleString('ja-JP', {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2
+                    })}
+                  </td>
+
+                  {/* VarLevelBarの列 */}
+                  <td className="w-[28rem] px-4 py-3">
+                    <VarLevelBar
+                      amount={Math.abs(item.amount)}
+                      maxAmount={maxAmount}
+                      hue={hue}
+                    />
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>
@@ -256,21 +238,27 @@ export function AssetDetailsTable({ assets, factorVarList, portfolio }: AssetDet
   );
 }
 
-function VarLevelBar({ amount, maxAmount }: { amount: number; maxAmount: number }) {
+function VarLevelBar({ amount, maxAmount, hue }: { amount: number; maxAmount: number; hue?: number }) {
   if (maxAmount === 0) {
     return <div className="text-xs text-muted-foreground">データなし</div>
   }
 
   const normalized = Math.min(1, Math.max(0, amount / maxAmount))
-  const ratio = normalized > 0 ? Math.pow(normalized, 0.5) : 0
-  const clamped = Math.max(0.08, ratio)
-
+  const ratio = normalized
+  
   return (
     <div className="relative h-2 w-full overflow-hidden rounded-full bg-border/60">
       <div
-        className="absolute inset-y-0 left-0 rounded-full bg-sky-400"
-        style={{ width: `${clamped * 100}%` }}
+        className={clsx(
+          'absolute inset-y-0 left-0 rounded-full',
+          hue === undefined && 'bg-sky-400',
+        )}
+        style={{
+          width: `${ratio * 100}%`,
+          backgroundColor: hue !== undefined ? `hsl(${hue}, 70%, 50%)` : undefined,
+        }}
       />
     </div>
   )
 }
+

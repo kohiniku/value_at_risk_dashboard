@@ -3,7 +3,7 @@
 from datetime import date
 
 from fastapi import APIRouter, HTTPException, Query
-from sqlalchemy import case, desc, func, literal, select
+from sqlalchemy import Date, case, desc, func, literal, select, union_all
 from sqlalchemy.orm import aliased
 
 from ..core.constants import PORTFOLIO_AGGREGATE_RIC
@@ -50,129 +50,196 @@ def get_factor_var(
     as_of: date | None = None,
 ) -> FactorVarListResponse:
     with SessionLocal_PG() as session:
-        # branch_codes CTE
-        branch_codes_cte = (select(EntityBranchCodeRelation.branch_code).where(EntityBranchCodeRelation.entity == "invport")).cte("branch_codes")
+        asof_date_value = as_of.strftime("%Y-%m-%d")
 
-        # delta_sum CTE
-        delta_filtered = aliased(Delta, name="dt")
-        delta_sum_cte = (
+        # --- CTE: target_date -------------------------------------------------------
+        target_date = select(
+            literal(asof_date_value).cast(Date).label("asof_date"),
+        ).cte("target_date")
+
+        # --- CTE: entity_branches ---------------------------------------------------
+        entity_branches = (
             select(
-                Factor.unit_id,
+                EntityBranchCodeRelation.branch_code,
+            ).where(
+                EntityBranchCodeRelation.entity == "invport",
+            )
+        ).cte("entity_branches")
+
+        # --- CTE: delta_sum ---------------------------------------------------------
+        delta_alias = aliased(Delta, name="dt_delta")
+
+        delta_sum = (
+            select(
+                Factor.unit_id.label("unit_id"),
                 literal("Delta").label("name"),
-                delta_filtered.asof_date,
-                func.sum(delta_filtered.delta).label("dsum"),
+                delta_alias.asof_date.label("asof_date"),
+                func.sum(delta_alias.delta).label("dsum"),
             )
-            .select_from(Factor)
-            .join(
-                delta_filtered,
-                (Factor.factor_id == delta_filtered.factor_id)
-                & (delta_filtered.grid == "AllMember")
-                & (delta_filtered.branch_code.in_(select(branch_codes_cte.c.branch_code))),
+            .join(delta_alias, Factor.factor_id == delta_alias.factor_id)
+            .where(
+                Factor.unit_id.isnot(None),
+                delta_alias.grid == "AllMember",
+                delta_alias.branch_code.in_(select(entity_branches.c.branch_code)),
             )
-            .where(Factor.unit_id.isnot(None))
-            .group_by(Factor.unit_id, delta_filtered.asof_date)
+            .group_by(Factor.unit_id, delta_alias.asof_date)
         ).cte("delta_sum")
 
-        # vega_sum CTE
-        vega_filtered = aliased(Vega, name="dt")
-        vega_sum_cte = (
+        # --- CTE: vega_sum ----------------------------------------------------------
+        vega_alias = aliased(Vega, name="dt_vega")
+
+        vega_sum = (
             select(
-                Factor.unit_id,
+                Factor.unit_id.label("unit_id"),
                 literal("Vega").label("name"),
-                vega_filtered.asof_date,
-                func.sum(vega_filtered.vega).label("vsum"),
+                vega_alias.asof_date.label("asof_date"),
+                func.sum(vega_alias.vega).label("vsum"),
             )
-            .select_from(Factor)
-            .join(
-                vega_filtered,
-                (Factor.factor_id == vega_filtered.factor_id)
-                & (vega_filtered.grid == "AllMember")
-                & (vega_filtered.branch_code.in_(select(branch_codes_cte.c.branch_code))),
+            .join(vega_alias, Factor.factor_id == vega_alias.factor_id)
+            .where(
+                Factor.unit_id.isnot(None),
+                vega_alias.grid == "AllMember",
+                vega_alias.branch_code.in_(select(entity_branches.c.branch_code)),
             )
-            .where(Factor.unit_id.isnot(None))
-            .group_by(Factor.unit_id, vega_filtered.asof_date)
+            .group_by(Factor.unit_id, vega_alias.asof_date)
         ).cte("vega_sum")
 
-        # display_units CTE
-        display_units_cte = (select(DisplayUnit.unit_id, DisplayUnit.risk_category_id, DisplayUnit.currency_id)).cte("display_units")
+        # --- CTE: var_ranked --------------------------------------------------------
+        r = aliased(RiskCategories, name="r")
+        d = aliased(DisplayUnit, name="d")
+        c = aliased(Currencies, name="c")
+        f = aliased(Factor, name="f")
+        pl = aliased(ScenarioPLFromMatsuri, name="pl")
 
-        # factor_by_unit CTE
-        factor_by_unit_cte = (select(Factor.unit_id, Factor.factor_id)).cte("factor_by_unit")
+        # ウィンドウ関数: ROW_NUMBER() OVER (PARTITION BY d.unit_id ORDER BY SUM(pl.pl_value) ASC)
+        row_number_over = func.row_number().over(
+            partition_by=d.unit_id,
+            order_by=func.sum(pl.pl_value).asc(),
+        )
 
-        # scenario_pl_invport CTE
-        scenario_pl_invport_cte = (
-            select(ScenarioPLFromMatsuri.factor_id, ScenarioPLFromMatsuri.from_date, ScenarioPLFromMatsuri.pl_value).where(
-                ScenarioPLFromMatsuri.entity == "invport"
+        var_ranked = (
+            select(
+                r.risk_category_id,
+                r.risk_category_name,
+                c.currency_id,
+                c.currency_name,
+                d.unit_id,
+                d.unit_name,
+                pl.from_date,
+                row_number_over.label("rn"),
+                func.sum(pl.pl_value).label("var"),
             )
-        ).cte("scenario_pl_invport")
-
-        # var_joined CTE
-        var_joined_cte = (
-            select(
-                display_units_cte.c.risk_category_id,
-                display_units_cte.c.currency_id,
-                display_units_cte.c.unit_id,
-                scenario_pl_invport_cte.c.from_date,
-                scenario_pl_invport_cte.c.pl_value,
+            .select_from(r)
+            .join(d, r.risk_category_id == d.risk_category_id, isouter=True)
+            .join(c, d.currency_id == c.currency_id, isouter=True)
+            .join(f, d.unit_id == f.unit_id, isouter=True)
+            .join(
+                pl,
+                (f.factor_id == pl.factor_id) & (pl.entity == "invport") & (pl.asof_date == select(target_date.c.asof_date).scalar_subquery()),
+                isouter=True,
             )
-            .select_from(display_units_cte)
-            .outerjoin(factor_by_unit_cte, display_units_cte.c.unit_id == factor_by_unit_cte.c.unit_id)
-            .outerjoin(scenario_pl_invport_cte, factor_by_unit_cte.c.factor_id == scenario_pl_invport_cte.c.factor_id)
-        ).cte("var_joined")
-
-        # var_aggregated CTE
-        var_aggregated_cte = (
-            select(
-                var_joined_cte.c.risk_category_id,
-                var_joined_cte.c.currency_id,
-                var_joined_cte.c.unit_id,
-                var_joined_cte.c.from_date,
-                func.sum(var_joined_cte.c.pl_value).label("var"),
-            ).group_by(var_joined_cte.c.risk_category_id, var_joined_cte.c.currency_id, var_joined_cte.c.unit_id, var_joined_cte.c.from_date)
-        ).cte("var_aggregated")
-
-        # var_ranked CTE
-        var_ranked_cte = (
-            select(
-                var_aggregated_cte,
-                func.row_number().over(partition_by=var_aggregated_cte.c.unit_id, order_by=var_aggregated_cte.c.var.asc()).label("rn"),
+            .group_by(
+                r.risk_category_id,
+                r.risk_category_name,
+                c.currency_id,
+                c.currency_name,
+                d.unit_id,
+                d.unit_name,
+                pl.from_date,
             )
         ).cte("var_ranked")
 
-        # var_cte CTE
-        var_cte = (select(var_ranked_cte.c.unit_id, var_ranked_cte.c.from_date, var_ranked_cte.c.var).where(var_ranked_cte.c.rn == 8)).cte("var_cte")
+        # --- CTE: var (rn = 8 のみ残す) ---------------------------------------------
+        var = (
+            select(
+                var_ranked.c.unit_id,
+                var_ranked.c.risk_category_name,
+                var_ranked.c.currency_name,
+                var_ranked.c.unit_name,
+                var_ranked.c.from_date,
+                var_ranked.c.var,
+            ).where(var_ranked.c.rn == 8)
+        ).cte("var")
 
-        # base CTE (最終的なSELECT)
+        # --- 最終 SELECT ------------------------------------------------------------
         base_query = (
             select(
-                func.coalesce(delta_sum_cte.c.asof_date, vega_sum_cte.c.asof_date).label("asof_date"),
-                RiskCategories.risk_category_name,
-                Currencies.currency_name,
-                DisplayUnit.unit_name,
-                func.coalesce(delta_sum_cte.c.name, vega_sum_cte.c.name).label("sensitivity_type"),
-                case((func.coalesce(delta_sum_cte.c.dsum, vega_sum_cte.c.vsum) >= 0, "Positive"), else_="Negative").label("sensitivity_direction"),
-                var_cte.c.var,
+                var.c.risk_category_name,
+                var.c.currency_name,
+                var.c.unit_name,
+                case(
+                    (
+                        0 <= func.coalesce(delta_sum.c.dsum, vega_sum.c.vsum),
+                        literal("減少"),
+                    ),
+                    else_=literal("増加"),
+                ).label("sensitivity_direction"),
+                var.c.var,
             )
-            .select_from(DisplayUnit)
-            .outerjoin(RiskCategories, DisplayUnit.risk_category_id == RiskCategories.risk_category_id)
-            .outerjoin(Currencies, DisplayUnit.currency_id == Currencies.currency_id)
-            .outerjoin(delta_sum_cte, DisplayUnit.unit_id == delta_sum_cte.c.unit_id)
-            .outerjoin(vega_sum_cte, DisplayUnit.unit_id == vega_sum_cte.c.unit_id)
-            .outerjoin(var_cte, DisplayUnit.unit_id == var_cte.c.unit_id)
-            .where(func.coalesce(delta_sum_cte.c.asof_date, vega_sum_cte.c.asof_date) == "2025-09-30")
-            .order_by(DisplayUnit.risk_category_id, DisplayUnit.currency_id, DisplayUnit.unit_id)
+            .outerjoin(delta_sum, var.c.unit_id == delta_sum.c.unit_id)
+            .outerjoin(vega_sum, var.c.unit_id == vega_sum.c.unit_id)
+            .where(func.coalesce(delta_sum.c.asof_date, vega_sum.c.asof_date) == select(target_date.c.asof_date).scalar_subquery())
+            .order_by(var.c.unit_id)
         )
 
-        results = session.execute(base_query).all()
+        # --- CTE: var_ranked_total（invport全体のシナリオ別PL合計）---
+
+        pl_total = aliased(ScenarioPLFromMatsuri, name="pl_total")
+
+        row_number_total = func.row_number().over(
+            # 「factor方向に sum したあと」の値を、
+            # 全シナリオで通し番号（1,2,3,...）を振る
+            order_by=func.sum(pl_total.pl_value).asc(),
+        )
+
+        var_ranked_total = (
+            select(
+                pl_total.from_date,  # シナリオ軸
+                row_number_total.label("rn"),  # 低い方からの順位
+                func.sum(pl_total.pl_value).label("var"),  # factor方向に sum
+            )
+            .select_from(pl_total)
+            .where(
+                pl_total.entity == "invport",
+                pl_total.asof_date == select(target_date.c.asof_date).scalar_subquery(),  # 特定 asof_date
+            )
+            .group_by(pl_total.from_date)
+        ).cte("var_ranked_total")
+
+        # --- CTE: var_total（全体VaR）---
+        var_total = (
+            select(
+                var_ranked_total.c.from_date,
+                var_ranked_total.c.var,
+            ).where(var_ranked_total.c.rn == 8)
+        ).cte("var_total")
+
+        overall_row_query = select(
+            literal("全体").label("risk_category_name"),  # 好きなラベルに変更可
+            literal("-").label("currency_name"),
+            literal("全リスク合算").label("unit_name"),
+            case(
+                (var_total.c.var >= 0, literal("減少")),
+                else_=literal("増加"),
+            ).label("sensitivity_direction"),
+            var_total.c.var,
+        )
+
+        combined_query = union_all(
+            overall_row_query,
+            base_query,
+        )
+
+        results = session.execute(combined_query).all()
 
         res = FactorVarListResponse(
             factor_var_list=[
                 FactorVaR(
-                    risk_category=result[1],
-                    currency=result[2],
-                    risk_factor=result[3],
-                    risk_direction=result[5],
-                    var_amount=result[6],
+                    risk_category=result[0],
+                    currency=result[1],
+                    risk_factor=result[2],
+                    risk_direction=result[3],
+                    var_amount=-1 * result[4],
                     comparison=None,
                 )
                 for result in results

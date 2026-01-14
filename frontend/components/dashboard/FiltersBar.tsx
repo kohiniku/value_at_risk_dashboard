@@ -1,7 +1,6 @@
 'use client'
 
 import { Card } from '@/components/ui/card'
-import { Select } from '@/components/ui/select'
 
 interface FiltersBarProps {
   dates: string[]
@@ -10,22 +9,19 @@ interface FiltersBarProps {
 }
 
 export function FiltersBar({ dates, selectedDate, onDateChange }: FiltersBarProps) {
-  const formatDate = (iso: string) =>
-    new Date(iso).toLocaleDateString('ja-JP', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    })
-
   return (
     <Card>
-      <Select value={selectedDate} label="基準日" onChange={(event) => onDateChange(event.target.value)}>
-        {dates.map((iso) => (
-          <option key={iso} value={iso}>
-            {formatDate(iso)}
-          </option>
-        ))}
-      </Select>
+      <label className="flex w-full flex-col gap-2 text-sm text-muted-foreground">
+        <span className="font-medium uppercase tracking-wide">基準日</span>
+        <div className="relative">
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => onDateChange(e.target.value)}
+            className="w-full rounded-md border border-border bg-background px-3 py-2 text-foreground focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          />
+        </div>
+      </label>
     </Card>
   )
 }

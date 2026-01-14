@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 from math import sin
 from random import Random
-from typing import Any
+from typing import Any, TypedDict, cast
 
 from sqlalchemy.orm import Session
 
@@ -20,7 +20,16 @@ from .models import (
 )
 from .session import SessionLocal, engine
 
-ASSET_DEFINITIONS = [
+
+class AssetDefinition(TypedDict):
+    ric: str
+    name: str
+    category: str
+    base_amount: float
+    volatility: float
+
+
+ASSET_DEFINITIONS: list[AssetDefinition] = [
     {"ric": "JP_EQ_LARGE", "name": "日本株式（大型）", "category": "株式", "base_amount": 10.8, "volatility": 0.35},
     {"ric": "JP_EQ_MID", "name": "日本株式（中型）", "category": "株式", "base_amount": 6.2, "volatility": 0.28},
     {"ric": "US_EQ_TECH", "name": "米国株式（テック）", "category": "株式", "base_amount": 9.4, "volatility": 0.45},
@@ -51,7 +60,7 @@ CONTRIBUTION_PROFILES = {
     "コモディティ": {"window_drop": 0.25, "window_add": 0.20, "position_change": 0.25, "ranking_shift": 0.30},
 }
 
-SNAPSHOT_DAYS = 5
+SNAPSHOT_DAYS = 300
 
 DRIVER_LABELS = {
     "window_drop": "離脱要因",
@@ -145,6 +154,7 @@ def seed_demo_data(session: Session) -> None:
         asset_records: list[AssetVaRRecord] = []
         sum_amount = 0.0
         for idx, definition in enumerate(ASSET_DEFINITIONS):
+            definition = cast(AssetDefinition, definition)
             drift = sin((as_of.toordinal() + idx * 13) / 5) * definition["volatility"]
             amount = round(definition["base_amount"] + drift, 2)
             prev_amount = prev_amounts.get(definition["ric"], amount)
@@ -216,12 +226,12 @@ def seed_demo_data(session: Session) -> None:
 def _build_contributions(category: str, change_amount: float) -> dict[str, float]:
     profile = CONTRIBUTION_PROFILES.get(category, CONTRIBUTION_PROFILES["株式"])
     if change_amount == 0:
-        return {key: 0.0 for key in profile}
+        return dict.fromkeys(profile, 0.0)
     return {key: round(change_amount * weight, 3) for key, weight in profile.items()}
 
 
 def _aggregate_driver_totals(records: list[AssetVaRRecord]) -> dict[str, float]:
-    totals = {key: 0.0 for key in DRIVER_LABELS}
+    totals = dict.fromkeys(DRIVER_LABELS, 0.0)
     for record in records:
         totals["window_drop"] += record.window_drop_contribution
         totals["window_add"] += record.window_add_contribution
@@ -359,9 +369,10 @@ def _seed_news(session: Session, as_of_dates: list[date]) -> dict[date, list[dic
 
 def _seed_timeseries(session: Session, today: date) -> None:
     offsets = list(range(120, -1, -1))
-    portfolio_buckets = {offset: 0.0 for offset in offsets}
+    portfolio_buckets = dict.fromkeys(offsets, 0.0)
 
     for definition in ASSET_DEFINITIONS:
+        definition = cast(AssetDefinition, definition)
         points: list[VaRTimeSeriesRecord] = []
         base = definition["base_amount"]
         for offset in offsets:
@@ -407,6 +418,7 @@ def _seed_scenario_distribution(session: Session) -> None:
     records: list[ScenarioDistributionRecord] = []
 
     for definition in ASSET_DEFINITIONS:
+        definition = cast(AssetDefinition, definition)
         generator = rng_cache.setdefault(definition["ric"], Random(sum(ord(ch) for ch in definition["ric"])))
         values = _build_scenario_series(definition["base_amount"], definition["volatility"], generator)
         for idx, value in enumerate(values):

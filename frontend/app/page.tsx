@@ -342,22 +342,6 @@ export default function DashboardPage() {
     }
   }, [activeTab, pendingSection, summary, timeseries, news, scenarioValues])
 
-  if (!summary || !factorVar) {
-    return (
-      <div className="min-h-screen bg-background text-foreground">
-        <DashboardNavigation sections={DASHBOARD_SECTIONS} onNavigate={handleSectionNavigate} />
-        <div className="lg:pl-80">
-          <AppHeader tabs={TAB_OPTIONS} activeTab={activeTab} onTabChange={handleTabChange} />
-          <main className="mx-auto w-full max-w-[108rem] px-6 py-8 space-y-4">
-            <DashboardMobileNav sections={DASHBOARD_SECTIONS} onNavigate={handleSectionNavigate} />
-            <p className="text-sm text-muted-foreground">データを取得しています...</p>
-            {summaryError && <p className="text-sm text-rose-400">{summaryError}</p>}
-          </main>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="min-h-screen bg-background text-foreground">
       <DashboardNavigation sections={DASHBOARD_SECTIONS} onNavigate={handleSectionNavigate} />
@@ -370,64 +354,76 @@ export default function DashboardPage() {
             <section id="filters" className="scroll-mt-36">
               <FiltersBar
                 dates={availableDates}
-                selectedDate={selectedDate || summary.as_of}
+                selectedDate={selectedDate || summary?.as_of || ''}
                 onDateChange={handleDateChange}
               />
             </section>
 
-            <section id="summary" className="scroll-mt-36">
-              <SummaryCards metrics={metrics} />
-            </section>
-
-            <section id="var-comparison" className="scroll-mt-36">
-              <VarContributionChart
-                assets={summary.assets}
-                diversificationEffect={summary.portfolio.diversification_effect}
-                portfolioTotal={summary.portfolio.total}
-              />
-            </section>
-
-            <section id="asset-table" className="scroll-mt-36">
-              <AssetDetailsTable assets={summary.assets} factorVarList={factorVar.factor_var_list} portfolio={summary.portfolio} />
-            </section>
-
-            <section id="market-insights" className="scroll-mt-36">
-              <div className="grid gap-6 lg:grid-cols-3">
-                <div className="lg:col-span-1">
-                  <MarketSignalGauge signal={summary.market_signal} />
-                </div>
-                <div className="lg:col-span-2">
-                  <DriverCommentaryPanel commentary={summary.driver_commentary} />
-                </div>
+            {!summary || !factorVar ? (
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">データを取得しています...</p>
+                {summaryError && <p className="text-sm text-rose-400">{summaryError}</p>}
               </div>
-            </section>
+            ) : (
+              <>
+                <section id="summary" className="scroll-mt-36">
+                  <SummaryCards metrics={metrics} />
+                </section>
 
-            <section className="grid gap-6 lg:grid-cols-3" aria-label="時系列とニュース">
-              <div id="timeseries" className="space-y-6 lg:col-span-2 scroll-mt-36">
-                <TimeseriesControls
-                  options={commonAssetOptions}
-                  selectedRic={selectedRic}
-                  windowDays={windowDays}
-                  onAssetChange={handleAssetChange}
-                  onWindowChange={handleWindowChange}
-                />
-                <VarChartCard points={timeseries?.points ?? []} key={selectedRic} />
-                {timeseriesError && <p className="text-xs text-rose-400">{timeseriesError}</p>}
-              </div>
-              <div id="news" className="space-y-6 scroll-mt-36">
-                <NewsPanel items={news} loading={loadingNews} />
-              </div>
-            </section>
+                <section id="var-comparison" className="scroll-mt-36">
+                  <VarContributionChart
+                    assets={summary.assets}
+                    diversificationEffect={summary.portfolio.diversification_effect}
+                    portfolioTotal={summary.portfolio.total}
+                  />
+                </section>
 
-            <section id="scenario" className="scroll-mt-36">
-              <ScenarioDistributionChart
-                values={scenarioValues}
-                selectedRic={scenarioRic}
-                onRicChange={(ric) => setScenarioRic(ric)}
-                options={scenarioOptions}
-              />
-              {scenarioError && <p className="mt-1 text-xs text-rose-400">{scenarioError}</p>}
-            </section>
+                <section id="asset-table" className="scroll-mt-36">
+                  <AssetDetailsTable
+                    assets={summary.assets}
+                    factorVarList={factorVar.factor_var_list}
+                  />
+                </section>
+
+                <section id="market-insights" className="scroll-mt-36">
+                  <div className="grid gap-6 lg:grid-cols-3">
+                    <div className="lg:col-span-1">
+                      <MarketSignalGauge signal={summary.market_signal} />
+                    </div>
+                    <div className="lg:col-span-2">
+                      <DriverCommentaryPanel commentary={summary.driver_commentary} />
+                    </div>
+                  </div>
+                </section>
+
+                <section className="grid gap-6 lg:grid-cols-3" aria-label="時系列とニュース">
+                  <div id="timeseries" className="space-y-6 lg:col-span-2 scroll-mt-36">
+                    <TimeseriesControls
+                      options={commonAssetOptions}
+                      selectedRic={selectedRic}
+                      windowDays={windowDays}
+                      onAssetChange={handleAssetChange}
+                      onWindowChange={handleWindowChange}
+                    />
+                    <VarChartCard points={timeseries?.points ?? []} key={selectedRic} />
+                    {timeseriesError && <p className="text-xs text-rose-400">{timeseriesError}</p>}
+                  </div>
+                  <div id="news" className="space-y-6 scroll-mt-36">
+                    <NewsPanel items={news} loading={loadingNews} />
+                  </div>
+                </section>
+
+                <section id="scenario" className="scroll-mt-36">
+                  <ScenarioDistributionChart
+                    values={scenarioValues}
+                    selectedRic={scenarioRic}
+                    onRicChange={(ric) => setScenarioRic(ric)}
+                    options={scenarioOptions}
+                  />
+                  {scenarioError && <p className="mt-1 text-xs text-rose-400">{scenarioError}</p>}
+                </section>
+              </>
+            )}
           </div>
 
           <section

@@ -31,7 +31,7 @@ class FactorVaR(BaseModel):
     currency: str | None = None
     risk_factor: str
     risk_direction: str
-    var_amount: float
+    var_amount: float | None = None
     comparison: float | None = None
 
 
