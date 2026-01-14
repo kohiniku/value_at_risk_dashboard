@@ -90,7 +90,7 @@ export function AssetDetailsTable({ assets, factorVarList }: AssetDetailsTablePr
       result[risk_category][currencyKey][risk_factor] = {
         risk_direction: risk_direction,
         amount: var_amount / HUNDRED_MILLION,
-        comparison: comparison ? comparison / HUNDRED_MILLION : null
+        comparison: comparison !== null ? comparison / HUNDRED_MILLION : null
       };
 
       return result;
@@ -159,6 +159,9 @@ export function AssetDetailsTable({ assets, factorVarList }: AssetDetailsTablePr
   }
 
   const getRiskDirectionLabel = (category: string, direction: boolean) => {
+    if (category === '全体') {
+      return '-'
+    }
     if (category.includes('金利')) {
       return direction ? '上昇' : '低下'
     }
@@ -174,6 +177,10 @@ export function AssetDetailsTable({ assets, factorVarList }: AssetDetailsTablePr
   const getRiskDirectionColor = (category: string, direction: boolean) => {
     // 上昇・拡大・増加 -> Green (emerald-400)
     // 下落・縮小・低下・減少 -> Red (rose-400)
+
+    if (category === '全体') {
+      return 'text-muted-foreground'
+    }
     
     if (category.includes('金利')) {
       // True: 上昇 (Green), False: 低下 (Red)
@@ -262,7 +269,7 @@ export function AssetDetailsTable({ assets, factorVarList }: AssetDetailsTablePr
                   <td className="w-[28rem] px-4 py-3">
                     <VarLevelBar
                       amount={Math.abs(item.amount)}
-                      comparison={item.comparison ? Math.abs(item.comparison) : undefined}
+                      comparison={item.comparison !== null ? Math.abs(item.comparison) : undefined}
                       maxAmount={maxAmount}
                       hue={hue}
                     />
@@ -310,7 +317,7 @@ function VarLevelBar({ amount, comparison, maxAmount, hue }: { amount: number; c
   const comparisonRatio = comparison !== undefined ? Math.min(1, Math.max(0, comparison / maxAmount)) : undefined
 
   return (
-    <div className="relative h-6 w-full flex items-center">
+    <div className="flex flex-col w-full gap-1 justify-center">
       <div className="relative h-2 w-full overflow-hidden rounded-full bg-border/60">
         <div
           className={clsx(
@@ -322,16 +329,17 @@ function VarLevelBar({ amount, comparison, maxAmount, hue }: { amount: number; c
             backgroundColor: hue !== undefined ? `hsl(${hue}, 70%, 50%)` : undefined,
           }}
         />
-        {comparisonRatio !== undefined && (
+      </div>
+      {comparisonRatio !== undefined && (
+        <div className="relative h-1.5 w-full rounded-full bg-border/30">
           <div
-            className="absolute top-0 h-full w-1 bg-white/80 z-10"
+            className="absolute inset-y-0 left-0 rounded-full bg-slate-400"
             style={{
-              left: `${comparisonRatio * 100}%`,
-              transform: 'translateX(-50%)'
+              width: `${comparisonRatio * 100}%`,
             }}
           />
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -386,7 +386,7 @@ export default function DashboardPage() {
               </div>
             ) : (
               <>
-                <section id="summary" className="scroll-mt-36">
+                {/* <section id="summary" className="scroll-mt-36">
                   <SummaryCards metrics={metrics} />
                 </section>
 
@@ -396,7 +396,7 @@ export default function DashboardPage() {
                     diversificationEffect={summary.portfolio.diversification_effect}
                     portfolioTotal={summary.portfolio.total}
                   />
-                </section>
+                </section> */}
 
                 <section id="asset-table" className="scroll-mt-36">
                   <AssetDetailsTable
