@@ -163,15 +163,14 @@ export function AssetDetailsTable({ assets, factorVarList }: AssetDetailsTablePr
       return '-'
     }
     if (category.includes('金利')) {
-      return direction ? '上昇' : '低下'
+      return direction ? '低下' : '上昇'
     }
     if (category.includes('クレジット') || category.includes('為替')) {
-      return direction ? '拡大' : '縮小'
+      return direction ? '縮小' : '拡大'
     }
-    if (category.includes('株式') || category.includes('コモディティ') || category.includes('不動産')) {
+    if (category.includes('株') || category.includes('コモディティ') || category.includes('不動産')) {
       return direction ? '下落' : '上昇'
     }
-    return direction ? '増加' : '減少'
   }
 
   const getRiskDirectionColor = (category: string, direction: boolean) => {
@@ -181,21 +180,19 @@ export function AssetDetailsTable({ assets, factorVarList }: AssetDetailsTablePr
     if (category === '全体') {
       return 'text-muted-foreground'
     }
-    
+
     if (category.includes('金利')) {
-      // True: 上昇 (Green), False: 低下 (Red)
-      return direction ? 'text-emerald-400' : 'text-rose-400'
+      // True: 低下 (Red), False: 上昇 (Green)
+      return direction ? 'text-rose-400' : 'text-emerald-400'
     }
     if (category.includes('クレジット') || category.includes('為替')) {
-      // True: 拡大 (Green), False: 縮小 (Red)
-      return direction ? 'text-emerald-400' : 'text-rose-400'
+      // True: 縮小 (Red), False: 拡大 (Green)
+      return direction ? 'text-rose-400' : 'text-emerald-400'
     }
-    if (category.includes('株式') || category.includes('コモディティ') || category.includes('不動産')) {
+    if (category.includes('株') || category.includes('コモディティ') || category.includes('不動産')) {
       // True: 下落 (Red), False: 上昇 (Green)
       return direction ? 'text-rose-400' : 'text-emerald-400'
     }
-    // Default: True: 増加 (Green), False: 減少 (Red)
-    return direction ? 'text-emerald-400' : 'text-rose-400'
   }
 
   return (

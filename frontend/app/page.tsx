@@ -49,6 +49,7 @@ export default function DashboardPage() {
   const [availableDates, setAvailableDates] = useState<string[]>([])
   const [selectedDate, setSelectedDate] = useState('')
   const [comparisonDate, setComparisonDate] = useState('')
+  const [selectedBranch, setSelectedBranch] = useState('')
   const [selectedRic, setSelectedRic] = useState(AGGREGATE_RIC)
   const [windowDays, setWindowDays] = useState(30)
   const [timeseries, setTimeseries] = useState<TimeSeriesResponse | null>(null)
@@ -78,13 +79,16 @@ export default function DashboardPage() {
     if (comparisonDate) {
       params.append('comparison_date', comparisonDate)
     }
+    if (selectedBranch) {
+      params.append('branch_code', selectedBranch)
+    }
     const search = params.toString() ? `?${params.toString()}` : ''
     const response = await fetch(`${API_BASE}/var/factor_var${search}`, { cache: 'no-store' })
     if (!response.ok) {
       throw new Error(`Failed summary request: ${response.status}`)
     }
     return (await response.json()) as FactorVarListResponse
-  }, [selectedDate, comparisonDate])
+  }, [selectedDate, comparisonDate, selectedBranch])
 
   useEffect(() => {
     let active = true
@@ -152,7 +156,7 @@ export default function DashboardPage() {
       active = false
       clearInterval(intervalId)
     }
-  }, [fetchFactorVaR, selectedDate, comparisonDate])
+  }, [fetchFactorVaR, selectedDate, comparisonDate, selectedBranch])
 
   useEffect(() => {
     let cancelled = false
@@ -376,6 +380,8 @@ export default function DashboardPage() {
                 onDateChange={handleDateChange}
                 comparisonDate={comparisonDate}
                 onComparisonDateChange={setComparisonDate}
+                selectedBranch={selectedBranch}
+                onBranchChange={setSelectedBranch}
               />
             </section>
 
