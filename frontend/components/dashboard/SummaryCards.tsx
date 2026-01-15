@@ -8,12 +8,12 @@ interface SummaryCardsProps {
 
 export function SummaryCards({ metrics }: SummaryCardsProps) {
   return (
-    <section className="grid gap-6 md:grid-cols-3">
+    <section className="grid gap-6 md:grid-cols-2">
       {metrics.map((metric) => (
         <Card
           key={metric.label}
           className="relative overflow-hidden"
-          title={`${metric.label}（億円）`}
+          title={`${metric.label}`}
           actions={
             <span
               className={clsx(
@@ -27,11 +27,7 @@ export function SummaryCards({ metrics }: SummaryCardsProps) {
           }
         >
           <div className="flex flex-col gap-2">
-            <p className="text-3xl font-semibold">{metric.value.toFixed(1)}</p>
-            <p className="text-sm text-muted-foreground">
-              前日差(億円): {metric.delta >= 0 ? '+' : ''}
-              {metric.delta.toFixed(2)}
-            </p>
+            <p className="text-3xl font-semibold">{metric.value.toFixed(1)} 億円</p>
           </div>
         </Card>
       ))}

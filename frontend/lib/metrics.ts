@@ -1,32 +1,45 @@
-import type { SummaryResponse } from '@/types/var'
+import type { FactorVaR, SummaryResponse } from '@/types/var'
 
 export interface MetricSummary {
   label: string
   value: number
-  delta: number
+  delta?: number
   change: number
 }
 
-export const buildMetrics = (summary: SummaryResponse): MetricSummary[] => {
-  const primaryAsset = summary.assets[0]
+const HUNDRED_MILLION = 100000000
+
+export const buildMetrics = (
+  summary: SummaryResponse,
+  factorVarList?: FactorVaR[],
+): MetricSummary[] => {
+  if (!factorVarList) {
+    return []
+  }
+
+  const overall = factorVarList.find((f) => f.risk_category === '全体')
+  if (!overall) {
+    return []
+  }
+
+  const current = overall.var_amount / HUNDRED_MILLION
+  const comparison =
+    overall.comparison !== null ? overall.comparison / HUNDRED_MILLION : null
+  const delta = comparison !== null ? current - comparison : 0
+  const changePct = comparison ? (delta / comparison) * 100 : 0
+
   return [
     {
-      label: 'ポートフォリオVaR',
-      value: summary.portfolio.total,
-      delta: summary.portfolio.change_amount,
-      change: summary.portfolio.change_pct,
+      label: '全体VaR',
+      value: current,
+      delta: delta,
+      change: changePct,
     },
     {
-      label: '最大寄与資産',
-      value: primaryAsset?.amount ?? 0,
-      delta: primaryAsset?.change_amount ?? 0,
-      change: primaryAsset?.change_pct ?? 0,
-    },
-    {
-      label: '分散効果',
-      value: summary.portfolio.diversification_effect,
-      delta: summary.portfolio.diversification_effect,
-      change: summary.portfolio.change_pct,
+      label: '比較日からの増減',
+      value: delta,
+      delta: undefined,
+      change: changePct,
     },
   ]
 }

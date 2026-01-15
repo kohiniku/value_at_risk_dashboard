@@ -267,7 +267,10 @@ export default function DashboardPage() {
     }
   }, [])
 
-  const metrics = useMemo(() => (summary ? buildMetrics(summary) : []), [summary])
+  const metrics = useMemo(
+    () => (summary && factorVar ? buildMetrics(summary, factorVar.factor_var_list) : []),
+    [summary, factorVar],
+  )
   const commonAssetOptions = useMemo(() => {
     const base = [{ value: AGGREGATE_RIC, label: '全資産合算' }]
     if (!summary) {
@@ -392,11 +395,11 @@ export default function DashboardPage() {
               </div>
             ) : (
               <>
-                {/* <section id="summary" className="scroll-mt-36">
+                <section id="summary" className="scroll-mt-36">
                   <SummaryCards metrics={metrics} />
                 </section>
 
-                <section id="var-comparison" className="scroll-mt-36">
+                {/* <section id="var-comparison" className="scroll-mt-36">
                   <VarContributionChart
                     assets={summary.assets}
                     diversificationEffect={summary.portfolio.diversification_effect}
