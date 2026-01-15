@@ -272,8 +272,6 @@ def get_factor_var(
             ]
         )
 
-        print(res)
-
         return res
 
 
@@ -359,15 +357,77 @@ def get_var_timeseries(
 ) -> VaRTimeSeriesResponse:
     """Return a rolling window of VaR observations for an asset."""
 
-    with SessionLocal() as session:
-        stmt = select(VaRTimeSeriesRecord).where(VaRTimeSeriesRecord.ric == ric).order_by(desc(VaRTimeSeriesRecord.point_date)).limit(days)
-        records = list(session.scalars(stmt))
-        if not records:
-            raise HTTPException(status_code=404, detail=f"No time series found for {ric}")
+    branch_code = ric
+    with SessionLocal_PG() as session:
+        # 過去30日分の日付を取得
+        # ここでは、ScenarioPLFromMatsuriに存在する最新の日付から30日分を取得する
+        latest_date_stmt = (
+            select(ScenarioPLFromMatsuri.asof_date)
+            .where(ScenarioPLFromMatsuri.entity == "invport")
+            .order_by(desc(ScenarioPLFromMatsuri.asof_date))
+            .limit(1)
+        )
+        latest_date = session.execute(latest_date_stmt).scalar()
 
-        points = [VaRTimeSeriesPoint(date=record.point_date, value=record.value, change=record.change) for record in reversed(records)]
-        if points:
-            points[0].change = None
+        if not latest_date:
+            raise HTTPException(status_code=404, detail="No data found")
+
+        # 過去30日分の日付リストを取得
+        dates_stmt = (
+            select(ScenarioPLFromMatsuri.asof_date)
+            .where(ScenarioPLFromMatsuri.entity == "invport")
+            .where(ScenarioPLFromMatsuri.asof_date <= latest_date)
+            .distinct()
+            .order_by(desc(ScenarioPLFromMatsuri.asof_date))
+            .limit(days)
+        )
+        target_dates = [row[0] for row in session.execute(dates_stmt)]
+
+        points = []
+        prev_value = None
+
+        # 日付ごとにVaRを計算
+        # 古い日付から順に処理
+        for target_date in reversed(target_dates):
+            # CTE: var_ranked_total
+            row_number_total = func.row_number().over(
+                order_by=func.sum(ScenarioPLFromMatsuri.pl_value).asc(),
+            )
+
+            filters = [
+                ScenarioPLFromMatsuri.entity == "invport",
+                ScenarioPLFromMatsuri.asof_date == target_date,
+            ]
+            if branch_code != PORTFOLIO_AGGREGATE_RIC:
+                filters.append(ScenarioPLFromMatsuri.branch_code == branch_code)
+
+            var_ranked_total = (
+                select(
+                    ScenarioPLFromMatsuri.from_date,
+                    row_number_total.label("rn"),
+                    func.sum(ScenarioPLFromMatsuri.pl_value).label("var"),
+                )
+                .where(*filters)
+                .group_by(ScenarioPLFromMatsuri.from_date)
+            ).cte("var_ranked_total")
+
+            # CTE: var_total (rn = 8)
+            var_total_stmt = select(var_ranked_total.c.var).where(var_ranked_total.c.rn == 8)
+
+            var_value = session.execute(var_total_stmt).scalar()
+
+            if var_value is not None:
+                # 億円単位に変換し、符号を反転（VaRは通常正の値で表示するため）
+                value = float(abs(var_value)) / 100000000
+                change = None
+                if prev_value is not None:
+                    change = value - prev_value
+
+                points.append(VaRTimeSeriesPoint(date=target_date, value=value, change=change))
+                prev_value = value
+
+        print(VaRTimeSeriesResponse(ric=ric, points=points))
+
         return VaRTimeSeriesResponse(ric=ric, points=points)
 
 

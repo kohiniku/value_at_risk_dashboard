@@ -10,9 +10,10 @@ const ApexChart = dynamic(() => import('react-apexcharts'), { ssr: false })
 
 interface VarChartCardProps {
   points: TimeSeriesPoint[]
+  loading?: boolean
 }
 
-export function VarChartCard({ points }: VarChartCardProps) {
+export function VarChartCard({ points, loading }: VarChartCardProps) {
   const series = useMemo(
     () => [
       {
@@ -75,7 +76,12 @@ export function VarChartCard({ points }: VarChartCardProps) {
 
   return (
     <Card title="VaR推移">
-      <div className="h-72">
+      <div className="h-72 relative">
+        {loading && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/50 backdrop-blur-sm">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          </div>
+        )}
         <ApexChart type="line" options={options} series={series} height="100%" />
       </div>
     </Card>

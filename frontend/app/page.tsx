@@ -51,8 +51,10 @@ export default function DashboardPage() {
   const [comparisonDate, setComparisonDate] = useState('')
   const [selectedBranch, setSelectedBranch] = useState('')
   const [selectedRic, setSelectedRic] = useState(AGGREGATE_RIC)
+  const [timeseriesRic, setTimeseriesRic] = useState('')
   const [windowDays, setWindowDays] = useState(30)
   const [timeseries, setTimeseries] = useState<TimeSeriesResponse | null>(null)
+  const [timeseriesLoading, setTimeseriesLoading] = useState(false)
   const [timeseriesError, setTimeseriesError] = useState<string | null>(null)
   const [news, setNews] = useState<NewsItem[]>([])
   const [loadingNews, setLoadingNews] = useState(true)
@@ -195,19 +197,21 @@ export default function DashboardPage() {
   }, [selectedRic, summary])
 
   const fetchSeries = useCallback(async () => {
+    const targetRic = timeseriesRic || AGGREGATE_RIC
     const response = await fetch(
-      `${API_BASE}/var/timeseries?ric=${encodeURIComponent(selectedRic)}&days=${windowDays}`,
+      `${API_BASE}/var/timeseries?ric=${encodeURIComponent(targetRic)}&days=${windowDays}`,
       { cache: 'no-store' },
     )
     if (!response.ok) {
       throw new Error(`Failed timeseries request: ${response.status}`)
     }
     return (await response.json()) as TimeSeriesResponse
-  }, [selectedRic, windowDays])
+  }, [timeseriesRic, windowDays])
 
   useEffect(() => {
     let active = true
     const load = async () => {
+      setTimeseriesLoading(true)
       try {
         const payload = await fetchSeries()
         if (active) {
@@ -220,6 +224,10 @@ export default function DashboardPage() {
           setTimeseries(null)
           setTimeseriesError('時系列データの取得に失敗しました')
         }
+      } finally {
+        if (active) {
+          setTimeseriesLoading(false)
+        }
       }
     }
 
@@ -230,7 +238,7 @@ export default function DashboardPage() {
       active = false
       clearInterval(intervalId)
     }
-  }, [fetchSeries, selectedRic, windowDays])
+  }, [fetchSeries, timeseriesRic, windowDays])
 
   // fetch news once
   useEffect(() => {
@@ -303,7 +311,7 @@ export default function DashboardPage() {
   )
 
   const handleAssetChange = useCallback((asset: string) => {
-    setSelectedRic(asset)
+    setTimeseriesRic(asset)
   }, [])
 
   const handleWindowChange = useCallback((window: number) => {
@@ -429,12 +437,16 @@ export default function DashboardPage() {
                   <div id="timeseries" className="space-y-6 lg:col-span-2 scroll-mt-36">
                     <TimeseriesControls
                       options={commonAssetOptions}
-                      selectedRic={selectedRic}
+                      selectedRic={timeseriesRic}
                       windowDays={windowDays}
                       onAssetChange={handleAssetChange}
                       onWindowChange={handleWindowChange}
                     />
-                    <VarChartCard points={timeseries?.points ?? []} key={selectedRic} />
+                    <VarChartCard
+                      points={timeseriesLoading ? [] : (timeseries?.points ?? [])}
+                      key={timeseriesRic}
+                      loading={timeseriesLoading}
+                    />
                     {timeseriesError && <p className="text-xs text-rose-400">{timeseriesError}</p>}
                   </div>
                   <div id="news" className="space-y-6 scroll-mt-36">
