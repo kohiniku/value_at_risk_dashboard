@@ -22,7 +22,7 @@ class Factor(Base):
     factor_id = mapped_column(String(6), primary_key=True)
     factor_name = mapped_column(String, unique=True, nullable=False)
     description = mapped_column(String, nullable=True)
-    unit_id = mapped_column(Integer, nullable=True)
+    display_unit_id = mapped_column(Integer, nullable=True)
 
     def __repr__(self):
         return f"<Factor(factor_id='{self.factor_id}', factor_name='{self.factor_name}')>"
@@ -35,7 +35,7 @@ class Delta(Base):
     __table_args__ = {"schema": "public"}
 
     asof_date = mapped_column(Date, primary_key=True)
-    branch_code = mapped_column(String, primary_key=True)
+    section_code = mapped_column(String, primary_key=True)
     product = mapped_column(String, primary_key=True)
     factor_id = mapped_column(String, primary_key=True)
     grid = mapped_column(String, primary_key=True)
@@ -52,7 +52,7 @@ class Vega(Base):
     __table_args__ = {"schema": "public"}
 
     asof_date = mapped_column(Date, primary_key=True)
-    branch_code = mapped_column(String, primary_key=True)
+    section_code = mapped_column(String, primary_key=True)
     product = mapped_column(String, primary_key=True)
     factor_id = mapped_column(String, primary_key=True)
     grid = mapped_column(String, primary_key=True)
@@ -70,12 +70,12 @@ class ValueAtRisk(Base):
     __table_args__ = {"schema": "public"}
 
     asof_date = mapped_column(Date, primary_key=True)
-    branch_code = mapped_column(String, primary_key=True)
+    section_code = mapped_column(String, primary_key=True)
     var_value = mapped_column(Numeric)
     var_addon_scaled_99 = mapped_column(Numeric)
 
     def __repr__(self):
-        return f"<ValueAtRisk(asof_date='{self.asof_date}', branch_code='{self.branch_code}')>"
+        return f"<ValueAtRisk(asof_date='{self.asof_date}', section_code='{self.section_code}')>"
 
 
 class ScenarioPLFromMatsuri(Base):
@@ -86,7 +86,7 @@ class ScenarioPLFromMatsuri(Base):
 
     asof_date = mapped_column(Date, primary_key=True, nullable=False)
     entity = mapped_column(String, primary_key=True, nullable=False)
-    branch_code = mapped_column(String, primary_key=True, nullable=False)
+    section_code = mapped_column(String, primary_key=True, nullable=False)
     product = mapped_column(String, primary_key=True, nullable=False)
     factor_id = mapped_column(String, primary_key=True, nullable=False)
     from_date = mapped_column(Date, primary_key=True, nullable=False)
@@ -94,7 +94,9 @@ class ScenarioPLFromMatsuri(Base):
     pl_value = mapped_column(Numeric, nullable=False)
 
     def __repr__(self):
-        return f"<ScenarioPL(asof_date='{self.asof_date}', branch_code='{self.branch_code}', product='{self.product}', factor_id='{self.factor_id}')>"
+        return (
+            f"<ScenarioPL(asof_date='{self.asof_date}', section_code='{self.section_code}', product='{self.product}', factor_id='{self.factor_id}')>"
+        )
 
 
 class MarketDataFromHanabi(Base):
@@ -144,15 +146,15 @@ class DisplayUnit(Base):
     __tablename__ = "display_unit"
     __table_args__ = {"schema": "public"}
 
-    unit_id = mapped_column(Integer, primary_key=True, nullable=False)
-    unit_name = mapped_column(String, nullable=False)
+    display_unit_id = mapped_column(Integer, primary_key=True, nullable=False)
+    display_unit_name = mapped_column(String, nullable=False)
     risk_category_id = mapped_column(Integer, nullable=False)
     currency_id = mapped_column(Integer, nullable=True)
 
 
-class EntityBranchCodeRelation(Base):
-    __tablename__ = "entity_branch_code_relation"
+class EntitySectionRelation(Base):
+    __tablename__ = "entity_section_relation"
     __table_args__ = {"schema": "public"}
 
     entity = mapped_column(String, primary_key=True, nullable=False)
-    branch_code = mapped_column(String, nullable=False)
+    section_code = mapped_column(String, nullable=False)

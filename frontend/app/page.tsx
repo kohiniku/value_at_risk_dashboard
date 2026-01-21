@@ -82,7 +82,7 @@ export default function DashboardPage() {
       params.append('comparison_date', comparisonDate)
     }
     if (selectedBranch) {
-      params.append('branch_code', selectedBranch)
+      params.append('section_code', selectedBranch)
     }
     const search = params.toString() ? `?${params.toString()}` : ''
     const response = await fetch(`${API_BASE}/var/factor_var${search}`, { cache: 'no-store' })
@@ -422,7 +422,7 @@ export default function DashboardPage() {
                   />
                 </section>
 
-                <section id="market-insights" className="scroll-mt-36">
+                {/* <section id="market-insights" className="scroll-mt-36">
                   <div className="grid gap-6 lg:grid-cols-3">
                     <div className="lg:col-span-1">
                       <MarketSignalGauge signal={summary.market_signal} />
@@ -431,7 +431,7 @@ export default function DashboardPage() {
                       <DriverCommentaryPanel commentary={summary.driver_commentary} />
                     </div>
                   </div>
-                </section>
+                </section> */}
 
                 <section className="grid gap-6 lg:grid-cols-3" aria-label="時系列とニュース">
                   <div id="timeseries" className="space-y-6 lg:col-span-2 scroll-mt-36">
@@ -454,7 +454,7 @@ export default function DashboardPage() {
                   </div>
                 </section>
 
-                <section id="scenario" className="scroll-mt-36">
+                {/* <section id="scenario" className="scroll-mt-36">
                   <ScenarioDistributionChart
                     values={scenarioValues}
                     selectedRic={scenarioRic}
@@ -462,7 +462,7 @@ export default function DashboardPage() {
                     options={scenarioOptions}
                   />
                   {scenarioError && <p className="mt-1 text-xs text-rose-400">{scenarioError}</p>}
-                </section>
+                </section> */}
               </>
             )}
           </div>
