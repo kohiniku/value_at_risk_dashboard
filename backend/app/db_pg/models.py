@@ -40,6 +40,7 @@ class Delta(Base):
     factor_id = mapped_column(String, primary_key=True)
     grid = mapped_column(String, primary_key=True)
     delta = mapped_column(Numeric)
+    dept_name = mapped_column(String, nullable=True)
 
     def __repr__(self):
         return f"<Delta(asof_date='{self.asof_date}', factor_id='{self.factor_id}')>"
@@ -58,6 +59,7 @@ class Vega(Base):
     grid = mapped_column(String, primary_key=True)
     grid2 = mapped_column(String, primary_key=True)
     vega = mapped_column(Numeric)
+    dept_name = mapped_column(String, nullable=True)
 
     def __repr__(self):
         return f"<Vega(asof_date='{self.asof_date}', factor_id='{self.factor_id}')>"
@@ -92,6 +94,7 @@ class ScenarioPLFromMatsuri(Base):
     from_date = mapped_column(Date, primary_key=True, nullable=False)
     to_date = mapped_column(Date, primary_key=True, nullable=False)
     pl_value = mapped_column(Numeric, nullable=False)
+    dept_name = mapped_column(String, nullable=True)
 
     def __repr__(self):
         return (

@@ -4,13 +4,48 @@ import { Card } from '@/components/ui/card'
 import { Select } from '@/components/ui/select'
 
 export const DEPARTMENT_PRODUCT_MAPPING = [
-  { label: '全部署 / 全商品', value: '' },
-  { label: '総合資金部_ALM', value: 'ALM Operation' },
-  { label: 'グローバルクレジット投資部_クレジット', value: 'Credit(JPY)' },
-  { label: '国際証券投資部_海外株&コモディティ', value: 'Equity & Commodity(non-JPY)(IC)' },
-  { label: '証券投資部_日本株', value: 'Equity(JPY)(IC)' },
-  { label: '証券投資部_日本金利', value: 'Fixed Income(JPY)' },
-  { label: '国際証券投資部_海外金利', value: 'Fixed Income(non-JPY)' },
+  { label: '投資ポート全体', value: '' },
+  {
+    label: '　∟証券投資部',
+    value: JSON.stringify({ dept_name: 'Fixed Income & Equity Investment Dept(IC)' }),
+  },
+  {
+    label: '　　∟円株',
+    value: JSON.stringify({
+      dept_name: 'Fixed Income & Equity Investment Dept(IC)',
+      section_code: 'Equity(JPY)(IC)',
+    }),
+  },
+  {
+    label: '　　∟円債',
+    value: JSON.stringify({
+      dept_name: 'Fixed Income & Equity Investment Dept(IC)',
+      section_code: 'Fixed Income(JPY)',
+    }),
+  },
+  {
+    label: '　∟国際証券投資部',
+    value: JSON.stringify({ dept_name: "Int'l Fixed Income & Equity Investment Dept(IC)" }),
+  },
+  {
+    label: '　　∟外株＆コモディティ',
+    value: JSON.stringify({
+      dept_name: "Int'l Fixed Income & Equity Investment Dept(IC)",
+      section_code: 'Equity & Commodity(non-JPY)(IC)',
+    }),
+  },
+  {
+    label: '　　∟外債',
+    value: JSON.stringify({
+      dept_name: "Int'l Fixed Income & Equity Investment Dept(IC)",
+      section_code: 'Fixed Income(non-JPY)',
+    }),
+  },
+  {
+    label: '　∟グローバルクレジット投資部',
+    value: JSON.stringify({ dept_name: 'Credit & Alternative Investment Dept(JPY)(IC)' }),
+  },
+  { label: '　∟総合資金部', value: JSON.stringify({ dept_name: 'Treasury Dept(JPY)' }) },
 ]
 
 interface FiltersBarProps {

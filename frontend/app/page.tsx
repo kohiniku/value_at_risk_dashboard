@@ -82,7 +82,17 @@ export default function DashboardPage() {
       params.append('comparison_date', comparisonDate)
     }
     if (selectedBranch) {
-      params.append('section_code', selectedBranch)
+      try {
+        const branchFilter = JSON.parse(selectedBranch)
+        if (branchFilter.dept_name) {
+          params.append('dept_name', branchFilter.dept_name)
+        }
+        if (branchFilter.section_code) {
+          params.append('section_code', branchFilter.section_code)
+        }
+      } catch (e) {
+        console.error('Failed to parse selectedBranch', e)
+      }
     }
     const search = params.toString() ? `?${params.toString()}` : ''
     const response = await fetch(`${API_BASE}/var/factor_var${search}`, { cache: 'no-store' })
@@ -198,15 +208,33 @@ export default function DashboardPage() {
 
   const fetchSeries = useCallback(async () => {
     const targetRic = timeseriesRic || AGGREGATE_RIC
+    const params = new URLSearchParams()
+    params.append('ric', targetRic)
+    params.append('days', windowDays.toString())
+
+    if (selectedBranch) {
+      try {
+        const branchFilter = JSON.parse(selectedBranch)
+        if (branchFilter.dept_name) {
+          params.append('dept_name', branchFilter.dept_name)
+        }
+        if (branchFilter.section_code) {
+          params.append('section_code_filter', branchFilter.section_code)
+        }
+      } catch (e) {
+        console.error('Failed to parse selectedBranch for timeseries', e)
+      }
+    }
+
     const response = await fetch(
-      `${API_BASE}/var/timeseries?ric=${encodeURIComponent(targetRic)}&days=${windowDays}`,
+      `${API_BASE}/var/timeseries?${params.toString()}`,
       { cache: 'no-store' },
     )
     if (!response.ok) {
       throw new Error(`Failed timeseries request: ${response.status}`)
     }
     return (await response.json()) as TimeSeriesResponse
-  }, [timeseriesRic, windowDays])
+  }, [timeseriesRic, windowDays, selectedBranch])
 
   useEffect(() => {
     let active = true

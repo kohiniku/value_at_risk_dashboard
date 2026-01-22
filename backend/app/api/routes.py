@@ -12,14 +12,12 @@ from ..db.models import (
     NewsRecord,
     ScenarioDistributionRecord,
     VaRSnapshot,
-    VaRTimeSeriesRecord,
 )
 from ..db.session import SessionLocal
 from ..db_pg.models import (
     Currencies,
     Delta,
     DisplayUnit,
-    EntitySectionRelation,
     Factor,
     RiskCategories,
     ScenarioPLFromMatsuri,
@@ -49,6 +47,7 @@ def get_factor_var(
     as_of: date | None = None,
     comparison_date: date | None = None,
     section_code: str | None = Query(None, description="Filter by specific branch code"),
+    dept_name: str | None = Query(None, description="Filter by department name"),
 ) -> FactorVarListResponse:
     with SessionLocal_PG() as session:
 
@@ -60,15 +59,6 @@ def get_factor_var(
                 literal(asof_date_value).cast(Date).label("asof_date"),
             ).cte("target_date")
 
-            # --- CTE: entity_branches ---------------------------------------------------
-            entity_branches = (
-                select(
-                    EntitySectionRelation.section_code,
-                ).where(
-                    EntitySectionRelation.entity == "invport",
-                )
-            ).cte("entity_branches")
-
             # --- CTE: delta_sum ---------------------------------------------------------
             delta_filters = [
                 Factor.display_unit_id.isnot(None),
@@ -76,8 +66,8 @@ def get_factor_var(
             ]
             if section_code:
                 delta_filters.append(Delta.section_code == section_code)
-            else:
-                delta_filters.append(Delta.section_code.in_(select(entity_branches.c.section_code)))
+            elif dept_name:
+                delta_filters.append(Delta.dept_name == dept_name)
 
             delta_sum = (
                 select(
@@ -98,8 +88,8 @@ def get_factor_var(
             ]
             if section_code:
                 vega_filters.append(Vega.section_code == section_code)
-            else:
-                vega_filters.append(Vega.section_code.in_(select(entity_branches.c.section_code)))
+            elif dept_name:
+                vega_filters.append(Vega.dept_name == dept_name)
 
             vega_sum = (
                 select(
@@ -128,6 +118,8 @@ def get_factor_var(
             )
             if section_code:
                 scenario_pl_join_conditions = scenario_pl_join_conditions & (ScenarioPLFromMatsuri.section_code == section_code)
+            elif dept_name:
+                scenario_pl_join_conditions = scenario_pl_join_conditions & (ScenarioPLFromMatsuri.dept_name == dept_name)
 
             var_ranked = (
                 select(
@@ -191,7 +183,6 @@ def get_factor_var(
                 .outerjoin(delta_sum, var.c.display_unit_id == delta_sum.c.display_unit_id)
                 .outerjoin(vega_sum, var.c.display_unit_id == vega_sum.c.display_unit_id)
                 .where(func.coalesce(delta_sum.c.asof_date, vega_sum.c.asof_date) == select(target_date.c.asof_date).scalar_subquery())
-                .order_by(var.c.display_unit_id)
             )
 
             # --- CTE: var_ranked_total（invport全体のシナリオ別PL合計）---
@@ -208,6 +199,8 @@ def get_factor_var(
             ]
             if section_code:
                 var_ranked_total_filters.append(ScenarioPLFromMatsuri.section_code == section_code)
+            elif dept_name:
+                var_ranked_total_filters.append(ScenarioPLFromMatsuri.dept_name == dept_name)
 
             var_ranked_total = (
                 select(
@@ -354,6 +347,8 @@ def get_var_summary(
 def get_var_timeseries(
     ric: str = Query(PORTFOLIO_AGGREGATE_RIC, description="Asset identifier to retrieve"),
     days: int = Query(30, ge=5, le=90),
+    dept_name: str | None = Query(None, description="Filter by department name"),
+    section_code_filter: str | None = Query(None, description="Filter by section code (when ric is aggregate)"),
 ) -> VaRTimeSeriesResponse:
     """Return a rolling window of VaR observations for an asset."""
 
@@ -400,6 +395,12 @@ def get_var_timeseries(
             ]
             if section_code != PORTFOLIO_AGGREGATE_RIC:
                 filters.append(ScenarioPLFromMatsuri.section_code == section_code)
+            else:
+                # Only apply filters if we are looking at the aggregate
+                if dept_name:
+                    filters.append(ScenarioPLFromMatsuri.dept_name == dept_name)
+                if section_code_filter:
+                    filters.append(ScenarioPLFromMatsuri.section_code == section_code_filter)
 
             var_ranked_total = (
                 select(
