@@ -10,7 +10,7 @@ pnpm install
 pnpm dev
 ```
 
-By default the app queries `NEXT_PUBLIC_API_BASE_URL` (see `.env.example`, default `/api/v1`). Run the FastAPI backend (or the docker-compose stack) so the dashboard always renders real, freshly seeded data.
+By default the app queries `NEXT_PUBLIC_API_BASE_URL` (see `.env.example`, default `/api/v1`). Run the FastAPI backend (or the docker-compose stack) so the dashboard always renders real data.
 When running under Docker Compose the `/api/v1` value keeps browser requests inside the nginx gateway; override it (e.g. `http://localhost:8000/api/v1`) only when you intentionally bypass nginx.
 
 ### Scripts
@@ -33,7 +33,7 @@ A starter test (`tests/SummaryCards.spec.ts`) ensures the component layer is cov
 
 ## Data Flow
 
-Client components fetch from the API using the public env vars. No local mock layer is bundled—keep the backend running (or the compose stack) so the UI can read the SQLite demo dataset seeded via `app/db/seed.py`.
+Client components fetch from the API using the public env vars. If you want to run without ClickHouse, start the backend with `VAR_DATA_SOURCE=demo` to return deterministic demo payloads.
 
 ## Docker
 

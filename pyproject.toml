@@ -3,7 +3,7 @@ name = "value_at_risk"
 version = "0.1.0"
 description = "Value at Risk dashboard"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.13"
 dependencies = [
 ]
 
@@ -31,7 +31,7 @@ disable = "all"
 enable = "E1101"
 
 [tool.mypy]
-python_version = "3.13"
+python_version = "3.12"
 no_strict_optional = true
 ignore_missing_imports = true
 check_untyped_defs = true

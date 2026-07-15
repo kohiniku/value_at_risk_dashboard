@@ -20,7 +20,6 @@ The service exposes:
 - `GET /health` – health probe
 - `GET /api/v1/var/summary` – latest VaR summary (portfolio + asset level)
 - `GET /api/v1/var/timeseries?ric=JP_EQUITY&days=30` – synthetic time-series window
-- `GET /api/v1/news` – mocked news items
 
 ## Tests
 
@@ -38,16 +37,11 @@ uv run python -m unittest backend.tests.test_var_api
 > uv run python -m unittest backend.tests.test_var_api
 > ```
 
-## Database & Seed Data
+## Database
 
-The API now persists demoデータ to SQLite (`DATABASE_URL`, default `sqlite:///./var_demo.db`). テーブルはアプリ起動時に自動作成され、レコードが存在しない場合は `app/db/seed.py` に定義したデモデータが投入されます。
+The API reads from ClickHouse via `app/db_ch/*` (configured by `CHDB_*` settings in `.env`).
 
-手動で初期化したい場合は以下を実行してください。
-
-```bash
-cd backend
-uv run python -m app.db.seed
-```
+If you want to run the API without ClickHouse (UI smoke test / local dev), set `VAR_DATA_SOURCE=demo` to return deterministic demo payloads.
 
 ## Docker
 
@@ -65,4 +59,4 @@ Environment variables are configured via `.env` (see `.env.example` in the repos
 
 - `PROXY_URL` / `NO_PROXY` support routing outbound HTTP requests through a proxy when integration points are introduced.
 - `CORS_ORIGINS` should be provided as a JSON array (e.g. `['http://localhost:3000','http://localhost:3100']`).
-- `DATABASE_URL` points to the SQLite DB (or your preferred RDBMS).
+- `VAR_DATA_SOURCE` controls data loading (`auto` / `demo`).

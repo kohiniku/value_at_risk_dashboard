@@ -1,95 +1,52 @@
-"""Regression-style API checks implemented with unittest (no external deps)."""
-from __future__ import annotations
-
-import os
 import unittest
-from pathlib import Path
+from datetime import date
+from unittest.mock import patch
 
-TEST_DB_PATH = Path(__file__).with_name("test_var_api.db")
-if TEST_DB_PATH.exists():
-    TEST_DB_PATH.unlink()
-os.environ["DATABASE_URL"] = f"sqlite:///{TEST_DB_PATH}"
-
-from app.api import routes  # noqa: E402
-from app.core.constants import PORTFOLIO_AGGREGATE_RIC, SCENARIO_WINDOW  # noqa: E402
-from app.db.seed import init_db  # noqa: E402
-from app.main import healthcheck  # noqa: E402
-
-init_db()
+from app.models.domain.filters import BranchFilters
+from app.models.domain.strategies import DefaultDataResolutionStrategy
+from app.services.var_service import VarService
 
 
-class VarApiTests(unittest.TestCase):
-    """Covers the public VaR endpoints by calling the route handlers directly."""
+class CheckFiltersTest(unittest.IsolatedAsyncioTestCase):
+    async def test_check(self):
+        with patch("app.api.deps.SessionLocal") as MockSession:
+            mock_session = MockSession.return_value.__enter__.return_value
+            queries = []
 
-    @classmethod
-    def tearDownClass(cls) -> None:
-        if TEST_DB_PATH.exists():
-            TEST_DB_PATH.unlink()
+            def execute_mock(stmt):
+                queries.append(str(stmt.compile(compile_kwargs={"literal_binds": True})))
 
-    def test_healthcheck_responds_ok(self) -> None:
-        self.assertEqual(healthcheck(), {"status": "ok"})
+                class _Res:
+                    def scalar(self):
+                        return 100.0
 
-    def test_var_summary_contains_assets(self) -> None:
-        payload = routes.get_var_summary(as_of=None)
+                    def first(self):
+                        return None
 
-        self.assertGreater(payload.portfolio.total, 0)
-        self.assertGreaterEqual(len(payload.assets), 3)
-        self.assertGreaterEqual(payload.market_signal.score, 0)
-        self.assertLessEqual(payload.market_signal.score, 100)
-        self.assertTrue(payload.market_signal.label)
-        self.assertTrue(payload.driver_commentary.technical_summary)
-        self.assertTrue(payload.driver_commentary.news_summary)
-        totals = payload.driver_commentary.driver_totals
-        self.assertTrue(any(abs(value) > 0 for value in totals.model_dump().values()))
-        first_asset = payload.assets[0]
-        self.assertTrue(first_asset.category)
-        self.assertSetEqual(
-            set(first_asset.contributions.model_dump().keys()),
-            {"window_drop", "window_add", "position_change", "ranking_shift"},
-        )
+                    def all(self):
+                        return []
 
-    def test_var_timeseries_returns_window(self) -> None:
-        summary = routes.get_var_summary(as_of=None)
-        target_ric = summary.assets[0].ric
-        payload = routes.get_var_timeseries(ric=target_ric, days=14)
+                    def __iter__(self):
+                        return iter([])
 
-        self.assertEqual(payload.ric, target_ric)
-        self.assertEqual(len(payload.points), 14)
-        self.assertIsNone(payload.points[0].change)
-        self.assertIsNotNone(payload.points[1].change)
+                    def scalars(self):
+                        return self
 
-    def test_news_endpoint_returns_seeded_items(self) -> None:
-        payload = routes.get_news(limit=2)
-        self.assertEqual(len(payload), 2)
-        sources = {item.source for item in payload}
-        self.assertEqual(len(sources), 2, msg="ニュースソースが重複しています")
-        for item in payload:
-            self.assertIn("｜", item.headline)
+                return _Res()
 
-    def test_var_dates_endpoint(self) -> None:
-        dates = routes.list_snapshot_dates()
-        self.assertGreaterEqual(len(dates), 2)
-        self.assertEqual(dates, sorted(dates, reverse=True))
+            mock_session.execute.side_effect = execute_mock
 
-    def test_var_summary_with_explicit_date(self) -> None:
-        dates = routes.list_snapshot_dates()
-        target = dates[-1]
-        payload = routes.get_var_summary(as_of=target)
-        self.assertEqual(payload.as_of, target)
-        self.assertEqual(payload.market_signal.as_of, target)
-        self.assertEqual(payload.driver_commentary.as_of, target)
-        self.assertTrue(payload.driver_commentary.technical_summary)
-        self.assertTrue(payload.driver_commentary.news_summary)
+            service = VarService(mock_session)
+            service.get_var_summary(
+                as_of=date(2026, 4, 1),
+                comparison_date=None,
+                branch_filters=BranchFilters(),
+                simulation_enabled=False,
+                simulation_adjustments=None,
+                data_resolution_strategy=DefaultDataResolutionStrategy(),
+            )
 
-    def test_scenario_distribution_endpoint(self) -> None:
-        payload = routes.get_scenario_distribution(ric=PORTFOLIO_AGGREGATE_RIC)
-        self.assertEqual(payload.ric, PORTFOLIO_AGGREGATE_RIC)
-        self.assertEqual(len(payload.values), SCENARIO_WINDOW)
-
-        summary = routes.get_var_summary(as_of=None)
-        target_ric = summary.assets[0].ric
-        asset_payload = routes.get_scenario_distribution(ric=target_ric)
-        self.assertEqual(asset_payload.ric, target_ric)
+            self.assertTrue(len(queries) > 0)
 
 
 if __name__ == "__main__":

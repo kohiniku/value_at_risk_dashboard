@@ -12,9 +12,10 @@ type AppHeaderProps = {
   tabs?: TabOption[]
   activeTab?: string
   onTabChange?: (key: string) => void
+  children?: React.ReactNode
 }
 
-export function AppHeader({ tabs, activeTab, onTabChange }: AppHeaderProps) {
+export function AppHeader({ tabs, activeTab, onTabChange, children }: AppHeaderProps) {
   const { theme, toggleTheme } = useTheme()
   const hasTabs = tabs && tabs.length > 0
 
@@ -31,9 +32,12 @@ export function AppHeader({ tabs, activeTab, onTabChange }: AppHeaderProps) {
               <h1 className="text-lg font-bold">Value at Risk モニター</h1>
             </div>
           </div>
-          <div className="ml-auto flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
-            <span>ダークモード</span>
-            <Switch aria-label="ダークモード切り替え" pressed={theme === 'dark'} onClick={toggleTheme} />
+          <div className="ml-auto flex items-center gap-4">
+            {children}
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
+              <span>ダークモード</span>
+              <Switch aria-label="ダークモード切り替え" pressed={theme === 'dark'} onClick={toggleTheme} />
+            </div>
           </div>
         </div>
         {hasTabs && (

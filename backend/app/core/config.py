@@ -16,20 +16,20 @@ def _split_cors(value: list[str] | str) -> list[str]:
 class Settings(BaseSettings):
     """Configuration values loaded from environment variables."""
 
-    model_config = SettingsConfigDict(env_file=".env", env_nested_delimiter="__")
+    # The repo root .env contains frontend/nginx variables too; ignore unknown keys.
+    model_config = SettingsConfigDict(env_file=".env", env_nested_delimiter="__", extra="ignore")
 
     app_name: str = "Value at Risk API"
     api_v1_str: str = "/api/v1"
     cors_origins: CorsOrigins = ["http://localhost:3000", "http://localhost:3100"]
     proxy_url: str | None = None
     no_proxy: str | None = None
-    database_url: str = "sqlite:///./var_demo.db"
 
-    pgdb_url: str = "100.66.149.33"
-    pgdb_port: str = "5432"
-    pgdb_user: str = "postgres"
-    pgdb_password: str = "var"
-    pgdb_database: str = "postgres"
+    chdb_url: str = "100.66.149.33"
+    chdb_port: str = "9000"
+    chdb_user: str = "chuser"
+    chdb_password: str = "password"
+    chdb_database: str = "vardb"
 
 
 @lru_cache

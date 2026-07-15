@@ -22,10 +22,6 @@ variable "NEXT_PUBLIC_API_BASE_URL" {
   default = "/api/v1"
 }
 
-variable "NEXT_PUBLIC_NEWS_LIMIT" {
-  default = "5"
-}
-
 group "default" {
   targets = ["backend", "frontend"]
 }
@@ -43,6 +39,5 @@ target "frontend" {
 
   args = {
     NEXT_PUBLIC_API_BASE_URL = "${NEXT_PUBLIC_API_BASE_URL}"
-    NEXT_PUBLIC_NEWS_LIMIT   = "${NEXT_PUBLIC_NEWS_LIMIT}"
   }
 }

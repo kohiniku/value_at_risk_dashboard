@@ -3,36 +3,18 @@ from datetime import date
 from pydantic import BaseModel, Field
 
 
-class DriverBreakdown(BaseModel):
-    """Quantifies contribution of each driver category."""
-
-    window_drop: float = 0.0
-    window_add: float = 0.0
-    position_change: float = 0.0
-    ranking_shift: float = 0.0
-
-
-class AssetVaR(BaseModel):
-    """VaR value at asset level."""
-
-    ric: str
-    name: str
-    category: str
-    amount: float
-    change_amount: float
-    change_pct: float
-    contributions: DriverBreakdown
-
-
 class FactorVaR(BaseModel):
     """VaR value at factor level."""
 
+    risk_category_id: int
     risk_category: str
+    currency_id: int | None = None
     currency: str | None = None
     risk_factor: str
-    risk_direction: bool
+    risk_direction: bool | None = None
     var_amount: float | None = None
     comparison: float | None = None
+    has_data: bool = True
 
 
 class FactorVarListResponse(BaseModel):
@@ -41,41 +23,44 @@ class FactorVarListResponse(BaseModel):
     factor_var_list: list[FactorVaR]
 
 
-class PortfolioVaR(BaseModel):
-    """Overall portfolio VaR information."""
+class SimulationFactor(BaseModel):
+    """Factor information for simulation input."""
 
-    total: float
-    change_amount: float
-    change_pct: float
-    diversification_effect: float = Field(..., description="Difference between sum of asset VaR and portfolio VaR")
+    risk_class: str | None = None
+    currency: str | None = None
+    risk_factor: str | None = None
+    factor_id: str
+    factor_name: str
+    description: str | None = None
+    base_position: float
 
 
-class MarketSignal(BaseModel):
-    """Gauge style indicator describing macro risk appetite."""
+class SimulationFactorListResponse(BaseModel):
+    """Collection of Simulation Factors."""
+
+    factors: list[SimulationFactor]
+    available_multiplier_products: list[str] = Field(default_factory=list)
+
+
+class SimulationAdjustment(BaseModel):
+    """Position adjustment input for VaR simulation."""
+
+    factor_id: str
+    position_delta: float = Field(..., description="Position delta in 億円 (OKU JPY)")
+
+
+class SimulationAdjustmentsImportResponse(BaseModel):
+    """Parsed adjustments imported from an Excel template."""
 
     as_of: date
-    score: float = Field(..., ge=0.0, le=100.0)
-    label: str
-    narrative: str
-
-
-class DriverCommentary(BaseModel):
-    """Textual summary of daily driver contributions and related news."""
-
-    as_of: date
-    technical_summary: str
-    news_summary: str
-    driver_totals: DriverBreakdown
+    adjustments: list[SimulationAdjustment]
 
 
 class VaRSummaryResponse(BaseModel):
     """Summary payload containing VaR details for a specific valuation date."""
 
     as_of: date
-    portfolio: PortfolioVaR
-    assets: list[AssetVaR]
-    market_signal: MarketSignal
-    driver_commentary: DriverCommentary
+    factor_var_list: list[FactorVaR] | None = None
 
 
 class VaRTimeSeriesPoint(BaseModel):
@@ -83,7 +68,11 @@ class VaRTimeSeriesPoint(BaseModel):
 
     date: date
     value: float
+    addon: float = 0.0
     change: float | None = None
+    category_var: dict[str, float] | None = None
+    vol_adj: float = 1.0
+    category_vol_adj: dict[str, float] | None = None
 
 
 class VaRTimeSeriesResponse(BaseModel):
@@ -93,18 +82,11 @@ class VaRTimeSeriesResponse(BaseModel):
     points: list[VaRTimeSeriesPoint]
 
 
-class NewsItem(BaseModel):
-    """News headline related to VaR movements."""
+class DashboardDataResponse(BaseModel):
+    """Aggregated response containing all dashboard data."""
 
-    id: str
-    headline: str
-    published_at: str
-    source: str
-    summary: str | None = None
-
-
-class ScenarioDistributionResponse(BaseModel):
-    """Distribution of scenario P/L values for histogram chart."""
-
-    ric: str
-    values: list[float]
+    summary: VaRSummaryResponse
+    factor_var: FactorVarListResponse
+    simulation_factors: SimulationFactorListResponse
+    timeseries: VaRTimeSeriesResponse
+    volatility_adjustments: dict[str, float]

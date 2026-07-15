@@ -2,7 +2,7 @@
 
 This repository hosts the first prototype for the Value at Risk dashboard initiative. The solution is split into:
 
-- `backend/` – FastAPI service delivering SQLite-backed VaR/newsデータ with automated API checks.
+- `backend/` – FastAPI service delivering SQLite-backed VaRデータ with automated API checks.
 - `frontend/` – Next.js 14 dashboard implementing the dark, card-driven UI described in `DESIGN.md`.
 
 ## Development Workflow
@@ -62,7 +62,7 @@ Following the TDD requirement, both stacks ship with an initial test to anchor f
 
 ## Next Steps
 
-- Replace mocked data with database-backed services (SQLite for prices, DynamoDB for news).
+- Replace mocked data with database-backed services.
 - Add authentication and role-based access as the product scope grows.
 - Flesh out E2E flows (Playwright/Cypress) once critical flows are defined.
 

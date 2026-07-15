@@ -2,26 +2,29 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AppHeader } from '@/components/AppHeader'
-import { FiltersBar } from '@/components/dashboard/FiltersBar'
-import { NewsPanel } from '@/components/dashboard/NewsPanel'
+import { DEPARTMENT_PRODUCT_MAPPING, FiltersBar } from '@/components/dashboard/FiltersBar'
 import { SummaryCards } from '@/components/dashboard/SummaryCards'
 import { VarChartCard } from '@/components/dashboard/VarChartCard'
-import { VarContributionChart } from '@/components/dashboard/VarContributionChart'
 import { AssetDetailsTable } from '@/components/dashboard/AssetDetailsTable'
-import { TimeseriesControls } from '@/components/dashboard/TimeseriesControls'
-import { ScenarioDistributionChart } from '@/components/dashboard/ScenarioDistributionChart'
-import { MarketSignalGauge } from '@/components/dashboard/MarketSignalGauge'
-import { DriverCommentaryPanel } from '@/components/dashboard/DriverCommentaryPanel'
+import { SimulationInputTable } from '@/components/dashboard/SimulationInputTable'
 import { DashboardNavigation, DashboardMobileNav } from '@/components/dashboard/DashboardNavigation'
+import { SettingsPanel } from '@/components/SettingsPanel'
 import { Card } from '@/components/ui/card'
 import { buildMetrics } from '@/lib/metrics'
-import type { FactorVarListResponse, NewsItem, SummaryResponse, TimeSeriesResponse } from '@/types/var'
+import { appendBranchFiltersParam } from '@/lib/branchFilters'
+import type { FactorVarListResponse, SummaryResponse, TimeSeriesResponse, SimulationFactorListResponse, DashboardDataResponse } from '@/types/var'
 import { AGGREGATE_RIC } from '@/types/var'
-import type { ScenarioDistributionResponse } from '@/types/var'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? '/api/v1'
-const NEWS_LIMIT = Number.parseInt(process.env.NEXT_PUBLIC_NEWS_LIMIT ?? '5', 10)
-const REFRESH_INTERVAL_MS = Number.parseInt(process.env.NEXT_PUBLIC_REFRESH_INTERVAL_MS ?? '60000', 10)
+
+const REFRESH_INTERVAL_MS = (() => {
+  const raw = process.env.NEXT_PUBLIC_REFRESH_INTERVAL_MS
+  const parsed = Number.parseInt(raw ?? '60000', 10)
+  return Number.isFinite(parsed) ? parsed : 60000
+})()
+
+// 0以下で自動更新停止（初回ロードと依存変更時の再取得のみ）
+const AUTO_REFRESH_ENABLED = REFRESH_INTERVAL_MS > 0
 
 type TabKey = 'dashboard' | 'assistant'
 
@@ -33,289 +36,232 @@ const TAB_OPTIONS: { key: TabKey; label: string }[] = [
 const DASHBOARD_SECTIONS: { id: string; label: string; description?: string }[] = [
   { id: 'filters', label: '基準日', description: '全ビュー更新' },
   { id: 'summary', label: '指標カード', description: 'VaR総額など' },
-  { id: 'var-comparison', label: 'VaR比較', description: 'ポートフォリオ vs 資産別' },
   { id: 'asset-table', label: '資産別テーブル', description: '分類別詳細' },
-  { id: 'market-insights', label: '市場シグナル', description: 'ゲージと解説' },
+  { id: 'simulation-input', label: 'シミュレーション入力', description: '変動要因の調整' },
   { id: 'timeseries', label: '時系列チャート', description: '資産別推移' },
-  { id: 'news', label: 'ニュース', description: '最新ヘッドライン' },
-  { id: 'scenario', label: 'シナリオ分布', description: '800日ヒストグラム' },
 ]
 
+const getPreviousBusinessDay = (date: Date = new Date()) => {
+  const d = new Date(date)
+  const day = d.getDay()
+  if (day === 1) d.setDate(d.getDate() - 3)
+  else if (day === 0) d.setDate(d.getDate() - 2)
+  else d.setDate(d.getDate() - 1)
+  return d
+}
+
+const formatYYYYMMDD = (d: Date) => {
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 export default function DashboardPage() {
+  const [activeTab, setActiveTab] = useState<TabKey>('dashboard')
   const [summary, setSummary] = useState<SummaryResponse | null>(null)
   const [summaryError, setSummaryError] = useState<string | null>(null)
   const [factorVar, setFactorVar] = useState<FactorVarListResponse | null>(null)
   const [factorVarError, setFactorVarError] = useState<string | null>(null)
-  const [availableDates, setAvailableDates] = useState<string[]>([])
-  const [selectedDate, setSelectedDate] = useState('')
-  const [comparisonDate, setComparisonDate] = useState('')
-  const [selectedBranch, setSelectedBranch] = useState('')
+  const [simulationFactors, setSimulationFactors] = useState<SimulationFactorListResponse | null>(null)
+  const [simulationFactorsError, setSimulationFactorsError] = useState<string | null>(null)
+  const [selectedDate, setSelectedDate] = useState(() => formatYYYYMMDD(getPreviousBusinessDay()))
+  const [comparisonDate, setComparisonDate] = useState(() => {
+    const prev = getPreviousBusinessDay()
+    return formatYYYYMMDD(getPreviousBusinessDay(prev))
+  })
+  const [selectedBranch, setSelectedBranch] = useState(DEPARTMENT_PRODUCT_MAPPING[0]?.value ?? '')
   const [selectedRic, setSelectedRic] = useState(AGGREGATE_RIC)
-  const [timeseriesRic, setTimeseriesRic] = useState('')
-  const [windowDays, setWindowDays] = useState(30)
+  const [windowDays, setWindowDays] = useState(90)
   const [timeseries, setTimeseries] = useState<TimeSeriesResponse | null>(null)
   const [timeseriesLoading, setTimeseriesLoading] = useState(false)
   const [timeseriesError, setTimeseriesError] = useState<string | null>(null)
-  const [news, setNews] = useState<NewsItem[]>([])
-  const [loadingNews, setLoadingNews] = useState(true)
-  const [scenarioRic, setScenarioRic] = useState(AGGREGATE_RIC)
-  const [scenarioValues, setScenarioValues] = useState<number[]>([])
-  const [scenarioError, setScenarioError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<TabKey>('dashboard')
+  
+  
+  
+
+  // Settings
+  const [preferImportedDelta, setPreferImportedDelta] = useState(true)
+  const [useMonthlyVar, setUseMonthlyVar] = useState(true)
+  const [useVolatilityAdjustment, setUseVolatilityAdjustment] = useState(true)
+  
+
+  // Loading states
+  const [isSummaryLoading, setIsSummaryLoading] = useState(true)
+  const [isFactorVarLoading, setIsFactorVarLoading] = useState(true)
+  const [isSimulationFactorsLoading, setIsSimulationFactorsLoading] = useState(true)
+  
+
   const [pendingSection, setPendingSection] = useState<string | null>(null)
+  const [isSimulationEnabled, setIsSimulationEnabled] = useState(false)
+  const [simulationInputs, setSimulationInputs] = useState<Record<string, number>>({})
+  const [simulationMultipliers, setSimulationMultipliers] = useState<Record<string, number>>({})
 
-  const fetchSummary = useCallback(async () => {
-    const search = selectedDate ? `?as_of=${encodeURIComponent(selectedDate)}` : ''
-    const response = await fetch(`${API_BASE}/var/summary${search}`, { cache: 'no-store' })
-    if (!response.ok) {
-      throw new Error(`Failed summary request: ${response.status}`)
-    }
-    return (await response.json()) as SummaryResponse
-  }, [selectedDate])
+    const [volAdjMap, setVolAdjMap] = useState<Record<string, number>>({})
 
-  const fetchFactorVaR = useCallback(async () => {
+  const fetchDashboardData = useCallback(async (signal?: AbortSignal) => {
     const params = new URLSearchParams()
-    if (selectedDate) {
-      params.append('as_of', selectedDate)
+    if (selectedDate) params.append('as_of', selectedDate)
+    if (comparisonDate) params.append('comparison_date', comparisonDate)
+    if (isSimulationEnabled) {
+      params.append('simulation_enabled', 'true')
+      params.append('simulation_adjustments', JSON.stringify({
+        adjustments: simulationInputs,
+        multipliers: simulationMultipliers
+      }))
     }
-    if (comparisonDate) {
-      params.append('comparison_date', comparisonDate)
-    }
-    if (selectedBranch) {
-      try {
-        const branchFilter = JSON.parse(selectedBranch)
-        if (branchFilter.dept_name) {
-          params.append('dept_name', branchFilter.dept_name)
-        }
-        if (branchFilter.section_code) {
-          params.append('section_code', branchFilter.section_code)
-        }
-      } catch (e) {
-        console.error('Failed to parse selectedBranch', e)
-      }
-    }
-    const search = params.toString() ? `?${params.toString()}` : ''
-    const response = await fetch(`${API_BASE}/var/factor_var${search}`, { cache: 'no-store' })
-    if (!response.ok) {
-      throw new Error(`Failed summary request: ${response.status}`)
-    }
-    return (await response.json()) as FactorVarListResponse
-  }, [selectedDate, comparisonDate, selectedBranch])
-
-  useEffect(() => {
-    let active = true
-    const load = async () => {
-      try {
-        const payload = await fetchSummary()
-        if (!active) {
-          return
-        }
-        setSummary(payload)
-        setSummaryError(null)
-        if (!selectedDate) {
-          setSelectedDate(payload.as_of)
-        }
-        setSelectedRic((prev) => {
-          if (prev === AGGREGATE_RIC) {
-            return prev
-          }
-          if (payload.assets.some((asset) => asset.ric === prev)) {
-            return prev
-          }
-          return payload.assets[0]?.ric ?? AGGREGATE_RIC
-        })
-      } catch (error) {
-        console.error('サマリー取得に失敗しました', error)
-        if (active) {
-          setSummaryError('サマリーデータの取得に失敗しました')
-          setSummary(null)
-        }
-      }
-    }
-
-    load()
-    const intervalId = setInterval(load, REFRESH_INTERVAL_MS)
-
-    return () => {
-      active = false
-      clearInterval(intervalId)
-    }
-  }, [fetchSummary, selectedDate])
-
-  useEffect(() => {
-    let active = true
-    const load = async () => {
-      try {
-        const payload = await fetchFactorVaR()
-        if (!active) {
-          return
-        }
-        setFactorVar(payload)
-        setFactorVarError(null)
-      } catch (error) {
-        console.error('ファクター別VaR取得に失敗しました', error)
-        if (active) {
-          setFactorVarError('ファクター別VaRの取得に失敗しました')
-          setFactorVar(null)
-        }
-      }
-    }
-
-    load()
-    const intervalId = setInterval(load, REFRESH_INTERVAL_MS)
-
-    return () => {
-      active = false
-      clearInterval(intervalId)
-    }
-  }, [fetchFactorVaR, selectedDate, comparisonDate, selectedBranch])
-
-  useEffect(() => {
-    let cancelled = false
-    const loadDates = async () => {
-      try {
-        const response = await fetch(`${API_BASE}/var/dates`, { cache: 'no-store' })
-        if (!response.ok) {
-          throw new Error(`Failed dates request: ${response.status}`)
-        }
-        const payload: string[] = await response.json()
-        if (!cancelled && payload.length) {
-          setAvailableDates(payload)
-          setSelectedDate((prev) => (prev && payload.includes(prev) ? prev : payload[0]))
-          setComparisonDate((prev) => (prev && payload.includes(prev) ? prev : (payload.length > 1 ? payload[1] : '')))
-        }
-      } catch (error) {
-        console.error('基準日リスト取得に失敗しました', error)
-      }
-    }
-
-    loadDates()
-
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  // ensure selected RIC remains valid when summary updates
-  useEffect(() => {
-    if (!summary || selectedRic === AGGREGATE_RIC) {
-      return
-    }
-    if (!summary.assets.some((asset) => asset.ric === selectedRic) && summary.assets.length) {
-      setSelectedRic(summary.assets[0].ric)
-    }
-  }, [selectedRic, summary])
-
-  const fetchSeries = useCallback(async () => {
-    const targetRic = timeseriesRic || AGGREGATE_RIC
-    const params = new URLSearchParams()
-    params.append('ric', targetRic)
+    params.append('prefer_imported_delta', preferImportedDelta ? 'true' : 'false')
     params.append('days', windowDays.toString())
+    params.append('ric', selectedRic)
+    appendBranchFiltersParam(params, selectedBranch)
 
-    if (selectedBranch) {
-      try {
-        const branchFilter = JSON.parse(selectedBranch)
-        if (branchFilter.dept_name) {
-          params.append('dept_name', branchFilter.dept_name)
-        }
-        if (branchFilter.section_code) {
-          params.append('section_code_filter', branchFilter.section_code)
-        }
-      } catch (e) {
-        console.error('Failed to parse selectedBranch for timeseries', e)
-      }
+    const search = params.toString() ? `?${params.toString()}` : ''
+    const response = await fetch(`${API_BASE}/var/dashboard${search}`, { cache: 'no-store', signal })
+    if (response.status === 404) {
+      return null
     }
-
-    const response = await fetch(
-      `${API_BASE}/var/timeseries?${params.toString()}`,
-      { cache: 'no-store' },
-    )
     if (!response.ok) {
-      throw new Error(`Failed timeseries request: ${response.status}`)
+      throw new Error(`Failed dashboard request: ${response.status}`)
     }
-    return (await response.json()) as TimeSeriesResponse
-  }, [timeseriesRic, windowDays, selectedBranch])
+    return (await response.json()) as DashboardDataResponse
+  }, [selectedDate, comparisonDate, selectedBranch, isSimulationEnabled, simulationInputs, simulationMultipliers, preferImportedDelta, windowDays, selectedRic])
+
+  // 基準日・部門・オプション変更時のみ、シミュレーション要素の読込状態（ロード中）にする
+  useEffect(() => {
+    setIsSimulationFactorsLoading(true)
+    setSimulationFactors(null)
+  }, [selectedDate, selectedBranch, preferImportedDelta])
 
   useEffect(() => {
     let active = true
+    const abortController = new AbortController()
+
     const load = async () => {
+      setIsSummaryLoading(true)
+      setIsFactorVarLoading(true)
       setTimeseriesLoading(true)
       try {
-        const payload = await fetchSeries()
-        if (active) {
-          setTimeseries(payload)
-          setTimeseriesError(null)
+        const payload = await fetchDashboardData(abortController.signal)
+        if (!active || !payload) return
+
+        setSummary(payload.summary)
+        setFactorVar(payload.factor_var)
+        setSimulationFactors(payload.simulation_factors)
+        setTimeseries(payload.timeseries)
+        setVolAdjMap(payload.volatility_adjustments)
+
+        setSummaryError(null)
+        setFactorVarError(null)
+        setSimulationFactorsError(null)
+        setTimeseriesError(null)
+      } catch (error: any) {
+        if (error.name === 'AbortError') {
+          return // Ignore abort errors
         }
-      } catch (error) {
+        console.error('ダッシュボードデータの取得に失敗しました', error)
         if (active) {
-          console.error('時系列取得に失敗しました', error)
+          setSummaryError('データの取得に失敗しました')
+          setSummary(null)
+          setFactorVar(null)
+          setSimulationFactors(null)
           setTimeseries(null)
-          setTimeseriesError('時系列データの取得に失敗しました')
+          setVolAdjMap({})
         }
       } finally {
         if (active) {
+          setIsSummaryLoading(false)
+          setIsFactorVarLoading(false)
+          setIsSimulationFactorsLoading(false)
           setTimeseriesLoading(false)
         }
       }
     }
 
     load()
-    const intervalId = setInterval(load, REFRESH_INTERVAL_MS)
+    const intervalId = AUTO_REFRESH_ENABLED ? setInterval(load, REFRESH_INTERVAL_MS) : null
 
     return () => {
       active = false
-      clearInterval(intervalId)
+      abortController.abort()
+      if (intervalId !== null) clearInterval(intervalId)
     }
-  }, [fetchSeries, timeseriesRic, windowDays])
+  }, [fetchDashboardData])
 
-  // fetch news once
-  useEffect(() => {
-    let cancelled = false
-    const fetchNews = async () => {
-      try {
-        const response = await fetch(
-          `${API_BASE}/news?limit=${Number.isNaN(NEWS_LIMIT) ? 5 : NEWS_LIMIT}`,
-          { cache: 'no-store' },
-        )
-        if (!response.ok) {
-          throw new Error(`Failed news request: ${response.status}`)
-        }
-        const payload: NewsItem[] = await response.json()
-        if (!cancelled) {
-          setNews(payload)
-        }
-      } catch (error) {
-        if (!cancelled) {
-          console.error('ニュース取得に失敗しました', error)
-          setNews([])
-        }
-      } finally {
-        if (!cancelled) {
-          setLoadingNews(false)
-        }
+  // Multiplier logic
+  const displayMultiplier = useMonthlyVar ? Math.sqrt(22) : 1
+  const getVolAdj = useCallback((key: string) => {
+    if (!useVolatilityAdjustment) return 1.0
+    return volAdjMap[key] ?? 1.0
+  }, [useVolatilityAdjustment, volAdjMap])
+
+  const displaySummary = useMemo(() => {
+    if (!summary) return null
+    if (!useMonthlyVar && !useVolatilityAdjustment) return summary
+
+    const copy = structuredClone(summary) as SummaryResponse
+    return copy
+  }, [summary, useMonthlyVar, useVolatilityAdjustment])
+
+  const displayFactorVar = useMemo(() => {
+    if (!factorVar) return null
+    if (!useMonthlyVar && !useVolatilityAdjustment) return factorVar
+
+    const copy = structuredClone(factorVar) as FactorVarListResponse
+    const addonRow = copy.factor_var_list.find(f => f.risk_category === '調整')
+    const addonAmount = addonRow?.var_amount ?? 0
+    const addonComparison = addonRow?.comparison ?? null
+
+    copy.factor_var_list.forEach(f => {
+      let adj = 1.0
+      if (useVolatilityAdjustment) {
+        if (f.risk_category === "全体") adj = getVolAdj("total")
+        else if (f.risk_factor === "カテゴリ合算") adj = getVolAdj(`cat:${f.risk_category}`)
+        else adj = getVolAdj(`fac:${f.risk_category}:${f.currency ?? "null"}:${f.risk_factor}`)
       }
-    }
+      if (f.risk_category === "全体") {
+        const scenarioVar = f.var_amount - addonAmount
+        f.var_amount = (scenarioVar * adj + addonAmount) * displayMultiplier
+        if (f.comparison !== null) {
+          const compAddon = addonComparison ?? addonAmount
+          f.comparison = ((f.comparison - compAddon) * adj + compAddon) * displayMultiplier
+        }
+      } else {
+        f.var_amount *= displayMultiplier * adj
+        if (f.comparison !== null) f.comparison *= displayMultiplier * adj
+      }
+    })
+    return copy
+  }, [factorVar, displayMultiplier, getVolAdj, useMonthlyVar, useVolatilityAdjustment])
 
-    fetchNews()
+  const displayTimeseries = useMemo(() => {
+    if (!timeseries) return null
 
-    return () => {
-      cancelled = true
+    const copy = structuredClone(timeseries) as TimeSeriesResponse
+    copy.points.forEach(p => {
+      const adj = useVolatilityAdjustment ? (p.vol_adj ?? 1.0) : 1.0
+      const addon = p.addon ?? 0
+      p.value = (p.value * adj + addon) * displayMultiplier
+      if (p.category_var) {
+        const catVolAdj = p.category_vol_adj ?? {}
+        const adjusted: Record<string, number> = {}
+        for (const [cat, val] of Object.entries(p.category_var)) {
+          const catAdj = useVolatilityAdjustment ? (catVolAdj[cat] ?? 1.0) : 1.0
+          adjusted[cat] = val * displayMultiplier * catAdj
+        }
+        p.category_var = adjusted
+      }
+    })
+    for (let i = 0; i < copy.points.length; i++) {
+      copy.points[i].change = i > 0 ? copy.points[i].value - copy.points[i - 1].value : null
     }
-  }, [])
+    return copy
+  }, [timeseries, displayMultiplier, useVolatilityAdjustment])
 
   const metrics = useMemo(
-    () => (summary && factorVar ? buildMetrics(summary, factorVar.factor_var_list) : []),
-    [summary, factorVar],
+    () => (displaySummary && displayFactorVar ? buildMetrics(displaySummary, displayFactorVar.factor_var_list) : []),
+    [displaySummary, displayFactorVar],
   )
-  const commonAssetOptions = useMemo(() => {
-    const base = [{ value: AGGREGATE_RIC, label: '全資産合算' }]
-    if (!summary) {
-      return base
-    }
-    return [...base, ...summary.assets.map((asset) => ({ value: asset.ric, label: asset.name }))]
-  }, [summary])
-  const scenarioOptions = commonAssetOptions
-
+  
   const handleTabChange = useCallback((key: string) => {
     setActiveTab(key as TabKey)
   }, [])
@@ -326,71 +272,41 @@ export default function DashboardPage() {
   }, [])
 
   const handleDateChange = useCallback(
-    (date: string) => {
+    async (date: string) => {
       setSelectedDate(date)
-      const idx = availableDates.indexOf(date)
-      if (idx >= 0 && idx < availableDates.length - 1) {
-        setComparisonDate(availableDates[idx + 1])
-      } else {
-        setComparisonDate('')
+      try {
+        const response = await fetch(`${API_BASE}/var/previous_business_day?target_date=${date}`, { cache: 'no-store' })
+        if (response.ok) {
+          const payload = await response.json()
+          setComparisonDate(payload.previous_business_day)
+        } else {
+          setComparisonDate(formatYYYYMMDD(getPreviousBusinessDay(new Date(date))))
+        }
+      } catch (error) {
+        console.error('Failed to fetch previous business day', error)
+        setComparisonDate(formatYYYYMMDD(getPreviousBusinessDay(new Date(date))))
       }
     },
-    [availableDates],
+    [],
   )
-
-  const handleAssetChange = useCallback((asset: string) => {
-    setTimeseriesRic(asset)
-  }, [])
 
   const handleWindowChange = useCallback((window: number) => {
     setWindowDays(window)
   }, [])
 
-  const fetchScenarioDistribution = useCallback(async () => {
-    const response = await fetch(
-      `${API_BASE}/var/scenario-distribution?ric=${encodeURIComponent(scenarioRic)}`,
-      { cache: 'no-store' },
-    )
-    if (!response.ok) {
-      throw new Error(`Failed scenario distribution request: ${response.status}`)
-    }
-    return (await response.json()) as ScenarioDistributionResponse
-  }, [scenarioRic])
+  const handleSimulationInputChange = useCallback((factorName: string, value: number) => {
+    setSimulationInputs((prev) => ({
+      ...prev,
+      [factorName]: value,
+    }))
+  }, [])
 
-  useEffect(() => {
-    if (!summary) {
-      return
-    }
-    if (scenarioRic !== AGGREGATE_RIC && !summary.assets.some((asset) => asset.ric === scenarioRic)) {
-      setScenarioRic(summary.assets[0]?.ric ?? AGGREGATE_RIC)
-    }
-  }, [scenarioRic, summary])
+  const handleSimulationInputsReplace = useCallback((next: Record<string, number>) => {
+    setSimulationInputs(next)
+  }, [])
 
-  useEffect(() => {
-    let active = true
-    const load = async () => {
-      try {
-        const payload = await fetchScenarioDistribution()
-        if (active) {
-          setScenarioValues(payload.values)
-          setScenarioError(null)
-        }
-      } catch (error) {
-        if (active) {
-          console.error('シナリオ分布取得に失敗しました', error)
-          setScenarioValues([])
-          setScenarioError('シナリオPL分布の取得に失敗しました')
-        }
-      }
-    }
 
-    load()
-    const intervalId = setInterval(load, REFRESH_INTERVAL_MS)
-    return () => {
-      active = false
-      clearInterval(intervalId)
-    }
-  }, [fetchScenarioDistribution, scenarioRic])
+
 
   useEffect(() => {
     if (!pendingSection || activeTab !== 'dashboard') {
@@ -401,21 +317,29 @@ export default function DashboardPage() {
       target.scrollIntoView({ behavior: 'smooth', block: 'start' })
       setPendingSection(null)
     }
-  }, [activeTab, pendingSection, summary, timeseries, news, scenarioValues])
+  }, [activeTab, pendingSection, displaySummary, displayTimeseries])
 
   return (
     <div className="min-h-screen bg-background text-foreground">
       <DashboardNavigation sections={DASHBOARD_SECTIONS} onNavigate={handleSectionNavigate} />
       <div className="lg:pl-80">
-        <AppHeader tabs={TAB_OPTIONS} activeTab={activeTab} onTabChange={handleTabChange} />
+        <AppHeader tabs={TAB_OPTIONS} activeTab={activeTab} onTabChange={handleTabChange}>
+          <SettingsPanel 
+            preferImportedDelta={preferImportedDelta}
+            onPreferImportedDeltaChange={setPreferImportedDelta}
+            useMonthlyVar={useMonthlyVar}
+            onUseMonthlyVarChange={setUseMonthlyVar}
+            useVolatilityAdjustment={useVolatilityAdjustment}
+            onUseVolatilityAdjustmentChange={setUseVolatilityAdjustment}
+          />
+        </AppHeader>
         <main className="mx-auto w-full max-w-[108rem] px-6 py-8 space-y-8">
           <DashboardMobileNav sections={DASHBOARD_SECTIONS} onNavigate={handleSectionNavigate} />
 
           <div className={activeTab === 'dashboard' ? 'space-y-8' : 'hidden'} aria-hidden={activeTab !== 'dashboard'}>
             <section id="filters" className="scroll-mt-36">
               <FiltersBar
-                dates={availableDates}
-                selectedDate={selectedDate || summary?.as_of || ''}
+                selectedDate={selectedDate || displaySummary?.as_of || ''}
                 onDateChange={handleDateChange}
                 comparisonDate={comparisonDate}
                 onComparisonDateChange={setComparisonDate}
@@ -424,73 +348,95 @@ export default function DashboardPage() {
               />
             </section>
 
-            {!summary || !factorVar ? (
+            {(!displaySummary && summaryError) ? (
               <div className="space-y-4">
-                <p className="text-sm text-muted-foreground">データを取得しています...</p>
-                {summaryError && <p className="text-sm text-rose-400">{summaryError}</p>}
+                <p className="text-sm text-rose-400">{summaryError}</p>
               </div>
             ) : (
               <>
                 <section id="summary" className="scroll-mt-36">
-                  <SummaryCards metrics={metrics} />
+                  {displaySummary && metrics.length > 0 ? (
+                    <SummaryCards metrics={metrics} loading={isSummaryLoading || isFactorVarLoading} useMonthlyVar={useMonthlyVar} />
+                  ) : (
+                    <SummaryCards loading={isSummaryLoading || isFactorVarLoading} useMonthlyVar={useMonthlyVar} metrics={[
+                      { label: "全体", value: null as any, delta: null as any, change: null as any },
+                      { label: "金利", value: null as any, delta: null as any, change: null as any },
+                      { label: "株・REIT", value: null as any, delta: null as any, change: null as any },
+                      { label: "クレジット", value: null as any, delta: null as any, change: null as any },
+                      { label: "コモディティ", value: null as any, delta: null as any, change: null as any },
+                      { label: "為替", value: null as any, delta: null as any, change: null as any },
+                      { label: "調整", value: null as any, delta: null as any, change: null as any },
+                    ]} />
+                  )}
                 </section>
-
-                {/* <section id="var-comparison" className="scroll-mt-36">
-                  <VarContributionChart
-                    assets={summary.assets}
-                    diversificationEffect={summary.portfolio.diversification_effect}
-                    portfolioTotal={summary.portfolio.total}
-                  />
-                </section> */}
 
                 <section id="asset-table" className="scroll-mt-36">
-                  <AssetDetailsTable
-                    assets={summary.assets}
-                    factorVarList={factorVar.factor_var_list}
-                  />
+                  {displaySummary && displayFactorVar ? (
+                    <AssetDetailsTable
+                      factorVarList={displayFactorVar.factor_var_list}
+                      loading={isSummaryLoading || isFactorVarLoading}
+                      volAdjMap={volAdjMap}
+                      useVolatilityAdjustment={useVolatilityAdjustment}
+                    />
+                  ) : (
+                    <AssetDetailsTable
+                      factorVarList={[]}
+                      loading={isSummaryLoading || isFactorVarLoading}
+                      volAdjMap={volAdjMap}
+                      useVolatilityAdjustment={useVolatilityAdjustment}
+                    />
+                  )}
                 </section>
 
-                {/* <section id="market-insights" className="scroll-mt-36">
-                  <div className="grid gap-6 lg:grid-cols-3">
-                    <div className="lg:col-span-1">
-                      <MarketSignalGauge signal={summary.market_signal} />
-                    </div>
-                    <div className="lg:col-span-2">
-                      <DriverCommentaryPanel commentary={summary.driver_commentary} />
-                    </div>
-                  </div>
-                </section> */}
+                <section id="simulation-input" className="scroll-mt-36">
+                  {simulationFactors ? (
+                    <SimulationInputTable
+                        asOf={selectedDate || displaySummary?.as_of || ''}
+                        selectedBranch={selectedBranch}
+                        preferImportedDelta={preferImportedDelta}
+                        factors={simulationFactors.factors}
+                        availableMultiplierProducts={simulationFactors.available_multiplier_products}
+                        simulationInputs={simulationInputs}
+                        simulationMultipliers={simulationMultipliers}
+                        isSimulationEnabled={isSimulationEnabled}
+                        onSimulationEnabledChange={setIsSimulationEnabled}
+                        onInputChange={handleSimulationInputChange}
+                        onMultiplierChange={(product, value) => setSimulationMultipliers(prev => ({ ...prev, [product]: value }))}
+                        onReplaceInputs={handleSimulationInputsReplace}
+                        loading={isSimulationFactorsLoading}
+                      />
+                  ) : (
+                    <SimulationInputTable
+                        asOf={selectedDate || ''}
+                        selectedBranch={selectedBranch}
+                        preferImportedDelta={preferImportedDelta}
+                        factors={[]}
+                        availableMultiplierProducts={[]}
+                        simulationInputs={simulationInputs}
+                        simulationMultipliers={simulationMultipliers}
+                        isSimulationEnabled={isSimulationEnabled}
+                        onSimulationEnabledChange={setIsSimulationEnabled}
+                        onInputChange={handleSimulationInputChange}
+                        onMultiplierChange={(product, value) => setSimulationMultipliers(prev => ({ ...prev, [product]: value }))}
+                        onReplaceInputs={handleSimulationInputsReplace}
+                        loading={isSimulationFactorsLoading}
+                      />
+                  )}
+                </section>
 
-                <section className="grid gap-6 lg:grid-cols-3" aria-label="時系列とニュース">
-                  <div id="timeseries" className="space-y-6 lg:col-span-2 scroll-mt-36">
-                    <TimeseriesControls
-                      options={commonAssetOptions}
-                      selectedRic={timeseriesRic}
-                      windowDays={windowDays}
-                      onAssetChange={handleAssetChange}
-                      onWindowChange={handleWindowChange}
-                    />
+                <section id="timeseries" className="scroll-mt-36" aria-label="時系列">
+                  <div className="space-y-6">
                     <VarChartCard
-                      points={timeseriesLoading ? [] : (timeseries?.points ?? [])}
-                      key={timeseriesRic}
+                      points={timeseriesLoading ? [] : (displayTimeseries?.points ?? [])}
+                      key={selectedBranch}
                       loading={timeseriesLoading}
+                      windowDays={windowDays}
+                      onWindowChange={handleWindowChange}
+                      isSimulationEnabled={isSimulationEnabled}
                     />
                     {timeseriesError && <p className="text-xs text-rose-400">{timeseriesError}</p>}
                   </div>
-                  <div id="news" className="space-y-6 scroll-mt-36">
-                    <NewsPanel items={news} loading={loadingNews} />
-                  </div>
                 </section>
-
-                {/* <section id="scenario" className="scroll-mt-36">
-                  <ScenarioDistributionChart
-                    values={scenarioValues}
-                    selectedRic={scenarioRic}
-                    onRicChange={(ric) => setScenarioRic(ric)}
-                    options={scenarioOptions}
-                  />
-                  {scenarioError && <p className="mt-1 text-xs text-rose-400">{scenarioError}</p>}
-                </section> */}
               </>
             )}
           </div>
@@ -508,7 +454,7 @@ export default function DashboardPage() {
               <iframe
                 title="Dify chatbot preview"
                 className="h-[900px] w-full rounded-lg border border-border"
-                src="http://100.66.149.230/chatbot/b7OeyvKGrnpQ1KRt"
+                src="https://fei-dify.mhbk-gmc.com/chatbot/oM28hXDGJKm1M1v0"
               />
             </Card>
           </section>

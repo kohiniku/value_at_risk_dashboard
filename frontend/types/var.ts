@@ -5,62 +5,57 @@ export interface DriverContributions {
   ranking_shift: number
 }
 
-export interface Asset {
-  ric: string
-  name: string
-  category: string
-  amount: number
-  change_amount: number
-  change_pct: number
-  contributions: DriverContributions
-}
 
-export interface Portfolio {
-  total: number
-  change_amount: number
-  change_pct: number
-  diversification_effect: number
-}
 
-export interface MarketSignal {
-  as_of: string
-  score: number
-  label: string
-  narrative: string
-}
 
-export interface DriverCommentary {
-  as_of: string
-  technical_summary: string
-  news_summary: string
-  driver_totals: DriverContributions
-}
 
 export interface FactorVaR {
+  risk_category_id: number
   risk_category: string
+  currency_id: number | null
   currency: string | null
   risk_factor: string
-  risk_direction: boolean
+  risk_direction: boolean | null
   var_amount: number
   comparison: number | null
+  has_data: boolean
 }
 
 export interface FactorVarListResponse {
   factor_var_list: FactorVaR[]
 }
 
+export interface SimulationFactor {
+  factor_id: string
+  factor_name: string
+  description?: string | null
+  base_position: number
+  risk_class?: string | null
+  currency?: string | null
+  risk_factor?: string | null
+}
+
+export interface SimulationFactorListResponse {
+  factors: SimulationFactor[]
+  available_multiplier_products?: string[]
+}
+
 export interface SummaryResponse {
   as_of: string
-  portfolio: Portfolio
-  assets: Asset[]
-  market_signal: MarketSignal
-  driver_commentary: DriverCommentary
+  portfolio: any
+  assets: any[]
+  market_signal: any
+  driver_commentary: any
 }
 
 export interface TimeSeriesPoint {
   date: string
   value: number
+  addon?: number
   change?: number | null
+  category_var?: Record<string, number> | null
+  vol_adj?: number
+  category_vol_adj?: Record<string, number> | null
 }
 
 export interface TimeSeriesResponse {
@@ -68,17 +63,13 @@ export interface TimeSeriesResponse {
   points: TimeSeriesPoint[]
 }
 
-export interface NewsItem {
-  id: string
-  headline: string
-  published_at: string
-  source: string
-  summary?: string
-}
 
-export interface ScenarioDistributionResponse {
-  ric: string
-  values: number[]
+export interface DashboardDataResponse {
+  summary: SummaryResponse
+  factor_var: FactorVarListResponse
+  simulation_factors: SimulationFactorListResponse
+  timeseries: TimeSeriesResponse
+  volatility_adjustments: Record<string, number>
 }
 
 export const AGGREGATE_RIC = 'ALL_ASSETS'

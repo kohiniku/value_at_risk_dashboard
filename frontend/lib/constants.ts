@@ -1,0 +1,1 @@
+export const HUNDRED_MILLION = 100000000
