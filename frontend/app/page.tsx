@@ -8,6 +8,7 @@ import { VarChartCard } from '@/components/dashboard/VarChartCard'
 import { AssetDetailsTable } from '@/components/dashboard/AssetDetailsTable'
 import { SimulationInputTable } from '@/components/dashboard/SimulationInputTable'
 import { DashboardNavigation, DashboardMobileNav } from '@/components/dashboard/DashboardNavigation'
+import { DailyReportView } from '@/components/dashboard/DailyReportView'
 import { SettingsPanel } from '@/components/SettingsPanel'
 import { Card } from '@/components/ui/card'
 import { buildMetrics } from '@/lib/metrics'
@@ -26,10 +27,11 @@ const REFRESH_INTERVAL_MS = (() => {
 // 0以下で自動更新停止（初回ロードと依存変更時の再取得のみ）
 const AUTO_REFRESH_ENABLED = REFRESH_INTERVAL_MS > 0
 
-type TabKey = 'dashboard' | 'assistant'
+type TabKey = 'dashboard' | 'daily-report' | 'assistant'
 
 const TAB_OPTIONS: { key: TabKey; label: string }[] = [
   { key: 'dashboard', label: 'ダッシュボード' },
+  { key: 'daily-report', label: '日報用ビュー' },
   { key: 'assistant', label: 'AIアシスタント' },
 ]
 
@@ -440,6 +442,20 @@ export default function DashboardPage() {
               </>
             )}
           </div>
+
+          <section
+            className={activeTab === 'daily-report' ? 'space-y-6' : 'hidden'}
+            aria-hidden={activeTab !== 'daily-report'}
+          >
+            <DailyReportView
+              factorVarList={displayFactorVar?.factor_var_list ?? []}
+              simulationFactors={simulationFactors?.factors ?? []}
+              asOf={selectedDate || displaySummary?.as_of || ''}
+              comparisonDate={comparisonDate}
+              loading={isSummaryLoading || isFactorVarLoading}
+            />
+            {factorVarError && <p className="text-sm text-rose-400">{factorVarError}</p>}
+          </section>
 
           <section
             className={activeTab === 'assistant' ? 'space-y-6' : 'hidden'}
